@@ -6,6 +6,7 @@
 */
 
 #include "VEInclude.h"
+#include "glm/ext.hpp"
 
 namespace ve {
 
@@ -67,6 +68,8 @@ namespace ve {
 		if (pcParent == nullptr) {
 			pcParent = pCamera;
 		}
+
+		std::printf("[%s]\n", pCamera->getTransform());
 
 		///add the new translation vector to the previous one
 		float speed = 6.0f;
