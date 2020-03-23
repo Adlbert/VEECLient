@@ -17,7 +17,7 @@ namespace ve {
 	* \returns true to consume the event
 	*/
 	bool VEEventListenerGLFW::onKeyboard(veEvent event) {
-		if (event.idata1 == GLFW_KEY_ESCAPE ) {				//ESC pressed - end the engine
+		if (event.idata1 == GLFW_KEY_ESCAPE) {				//ESC pressed - end the engine
 			getEnginePointer()->end();
 			return true;
 		}
@@ -39,8 +39,8 @@ namespace ve {
 		float angle = 0.0;
 		float rotSpeed = 2.0;
 
-		VECamera *pCamera = getSceneManagerPointer()->getCamera();
-		VESceneNode *pParent = pCamera->getParent();
+		VECamera* pCamera = getSceneManagerPointer()->getCamera();
+		VESceneNode* pcParent = pCamera->getParent();
 
 		switch (event.idata1) {
 		case GLFW_KEY_A:
@@ -63,6 +63,41 @@ namespace ve {
 		case GLFW_KEY_E:
 			translate = glm::vec4(0.0, 1.0, 0.0, 1.0);  //up
 			break;
+		}
+		if (pcParent == nullptr) {
+			pcParent = pCamera;
+		}
+
+		///add the new translation vector to the previous one
+		float speed = 6.0f;
+		glm::vec3 trans = speed * glm::vec3(translate.x, translate.y, translate.z);
+		pcParent->multiplyTransform(glm::translate(glm::mat4(1.0f), (float)event.dt * trans));
+
+
+		VESceneNode* pPlayer = getSceneManagerPointer()->getSceneNode("The PLayer0");
+		VESceneNode* pParent = pPlayer->getParent();
+
+		switch (event.idata1) {
+		case GLFW_KEY_A:
+			translate = pPlayer->getTransform() * glm::vec4(-1.0, 0.0, 0.0, 1.0);	//left
+			break;
+		case GLFW_KEY_D:
+			translate = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //right
+			break;
+		case GLFW_KEY_W:
+			translate = pPlayer->getTransform() * glm::vec4(0.0, 0.0, 1.0, 1.0); //forward
+			translate.y = 0.0f;
+			break;
+		case GLFW_KEY_S:
+			translate = pPlayer->getTransform() * glm::vec4(0.0, 0.0, -1.0, 1.0); //back
+			translate.y = 0.0f;
+			break;
+		case GLFW_KEY_Q:
+			translate = glm::vec4(0.0, -1.0, 0.0, 1.0); //down
+			break;
+		case GLFW_KEY_E:
+			translate = glm::vec4(0.0, 1.0, 0.0, 1.0);  //up
+			break;
 		case GLFW_KEY_LEFT:							//yaw rotation is already in parent space
 			angle = rotSpeed * (float)event.dt * -1.0f;
 			rot4 = glm::vec4(0.0, 1.0, 0.0, 1.0);
@@ -73,11 +108,11 @@ namespace ve {
 			break;
 		case GLFW_KEY_UP:							//pitch rotation is in cam/local space
 			angle = rotSpeed * (float)event.dt * 1.0f;			//pitch angle
-			rot4 = pCamera->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
+			rot4 = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
 			break;
 		case GLFW_KEY_DOWN:							//pitch rotation is in cam/local space
 			angle = rotSpeed * (float)event.dt * -1.0f;		//pitch angle
-			rot4 = pCamera->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
+			rot4 = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
 			break;
 
 		default:
@@ -85,18 +120,18 @@ namespace ve {
 		};
 
 		if (pParent == nullptr) {
-			pParent = pCamera;
+			pParent = pPlayer;
 		}
 
 		///add the new translation vector to the previous one
-		float speed = 6.0f;
-		glm::vec3 trans = speed * glm::vec3(translate.x, translate.y, translate.z);
-		pParent->multiplyTransform( glm::translate(glm::mat4(1.0f), (float)event.dt * trans) );
+		speed = 6.0f;
+		trans = speed * glm::vec3(translate.x, translate.y, translate.z);
+		pParent->multiplyTransform(glm::translate(glm::mat4(1.0f), (float)event.dt * trans));
 
 		///combination of yaw and pitch, both wrt to parent space
 		glm::vec3  rot3 = glm::vec3(rot4.x, rot4.y, rot4.z);
 		glm::mat4  rotate = glm::rotate(glm::mat4(1.0), angle, rot3);
-		pCamera->multiplyTransform( rotate );
+		pPlayer->multiplyTransform(rotate);
 
 		return true;
 	}
@@ -133,25 +168,25 @@ namespace ve {
 		m_cursorPrevX = x;							//remember this for next iteration
 		m_cursorPrevY = y;
 
-		VECamera *pCamera = getSceneManagerPointer()->getCamera();
-		VESceneNode *pParent = pCamera->getParent();
+		VECamera* pCamera = getSceneManagerPointer()->getCamera();
+		VESceneNode* pParent = pCamera->getParent();
 
 		float slow = 0.5;		//camera rotation speed
 
 		//dx
-		float angledx = slow*(float)event.dt * dx;
+		float angledx = slow * (float)event.dt * dx;
 		glm::vec4 rot4dx = glm::vec4(0.0, 1.0, 0.0, 1.0);
 		glm::vec3 rot3dx = glm::vec3(rot4dx.x, rot4dx.y, rot4dx.z);
 		glm::mat4 rotatedx = glm::rotate(glm::mat4(1.0), angledx, rot3dx);
 
 		//dy
-		float angledy = slow*(float)event.dt * dy;			//pitch angle
+		float angledy = slow * (float)event.dt * dy;			//pitch angle
 		glm::vec4 rot4dy = pCamera->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
 		glm::vec3 rot3dy = glm::vec3(rot4dy.x, rot4dy.y, rot4dy.z);
 		glm::mat4 rotatedy = glm::rotate(glm::mat4(1.0), angledy, rot3dy);
 
-		pCamera->multiplyTransform( rotatedx * rotatedy  );
-		
+		pCamera->multiplyTransform(rotatedx * rotatedy);
+
 		return false;
 	}
 
@@ -187,20 +222,20 @@ namespace ve {
 	/**
 	*
 	* \brief React to mouse scroll events
-	* 
+	*
 	* They are the same as key W/S
 	*
 	* \param[in] event The mouse scroll event
 	* \returns false, so event is not consumed
-	* 
+	*
 	*/
 	bool VEEventListenerGLFW::onMouseScroll(veEvent event) {
 
 		float xoffset = event.fdata1;
 		float yoffset = event.fdata2;
 
-		VECamera *pCamera = getSceneManagerPointer()->getCamera();
-		VESceneNode *pParent = pCamera->getParent();
+		VECamera* pCamera = getSceneManagerPointer()->getCamera();
+		VESceneNode* pParent = pCamera->getParent();
 		glm::vec4 translate = 1000 * yoffset * glm::vec4(0.0, 0.0, 1.0, 1.0);
 
 		if (pParent == nullptr) {
@@ -214,7 +249,7 @@ namespace ve {
 
 		//add the new translation vector to the previous one
 		glm::vec3 trans = glm::vec3(translate.x, translate.y, translate.z);
-		pParent->setTransform( glm::translate(pParent->getTransform(), (float)event.dt * trans) );
+		pParent->setTransform(glm::translate(pParent->getTransform(), (float)event.dt * trans));
 
 		return false;
 	}
@@ -237,11 +272,11 @@ namespace ve {
 			uint32_t imageSize = extent.width * extent.height * 4;
 			VkImage image = getRendererPointer()->getSwapChainImage();
 
-			uint8_t *dataImage = new uint8_t[imageSize];
+			uint8_t* dataImage = new uint8_t[imageSize];
 
-			vh::vhBufCopySwapChainImageToHost(getRendererPointer()->getDevice(), 
+			vh::vhBufCopySwapChainImageToHost(getRendererPointer()->getDevice(),
 				getRendererPointer()->getVmaAllocator(),
-				getRendererPointer()->getGraphicsQueue(), 
+				getRendererPointer()->getGraphicsQueue(),
 				getRendererPointer()->getCommandPool(),
 				image, VK_FORMAT_R8G8B8A8_UNORM,
 				VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -249,7 +284,7 @@ namespace ve {
 
 			m_numScreenshot++;
 
-			std::string name("media/screenshots/screenshot" + std::to_string(m_numScreenshot-1) + ".jpg");
+			std::string name("media/screenshots/screenshot" + std::to_string(m_numScreenshot - 1) + ".jpg");
 			stbi_write_jpg(name.c_str(), extent.width, extent.height, 4, dataImage, 4 * extent.width);
 			delete[] dataImage;
 
@@ -258,7 +293,7 @@ namespace ve {
 
 		if (m_makeScreenshotDepth) {
 
-			VETexture *map = getRendererForwardPointer()->getShadowMap( getRendererPointer()->getImageIndex() )[0];
+			VETexture* map = getRendererForwardPointer()->getShadowMap(getRendererPointer()->getImageIndex())[0];
 			//VkImageLayout layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 			VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -266,19 +301,19 @@ namespace ve {
 			uint32_t imageSize = extent.width * extent.height;
 			VkImage image = map->m_image;
 
-			float *dataImage = new float[imageSize];
-			/*gli::*/byte *dataImage2 = new /*gli::*/byte[imageSize];
+			float* dataImage = new float[imageSize];
+			/*gli::*/byte* dataImage2 = new /*gli::*/byte[imageSize];
 
-			vh::vhBufCopyImageToHost(getRendererPointer()->getDevice(), 
+			vh::vhBufCopyImageToHost(getRendererPointer()->getDevice(),
 				getRendererPointer()->getVmaAllocator(),
-				getRendererPointer()->getGraphicsQueue(), 
+				getRendererPointer()->getGraphicsQueue(),
 				getRendererPointer()->getCommandPool(),
 				image, map->m_format, VK_IMAGE_ASPECT_DEPTH_BIT, layout,
 				(/*gli::*/byte*)dataImage, extent.width, extent.height, imageSize * 4);
 
 			for (uint32_t v = 0; v < extent.height; v++) {
 				for (uint32_t u = 0; u < extent.width; u++) {
-					dataImage2[v*extent.width + u] = (/*gli::*/byte)((dataImage[v*extent.width + u]-0.5)*256.0f*2.0f);
+					dataImage2[v * extent.width + u] = (/*gli::*/byte)((dataImage[v * extent.width + u] - 0.5) * 256.0f * 2.0f);
 					//std::cout << dataImage[v*extent.width + u] << " ";
 				}
 			}

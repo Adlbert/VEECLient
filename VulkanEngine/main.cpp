@@ -78,10 +78,13 @@ namespace ve {
 
 			if (g_restart) {
 				g_gameLost = false;
+
 				g_restart = false;
 				g_time = 30;
 				g_score = 0;
 				getSceneManagerPointer()->getSceneNode("The Cube Parent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
+				//getSceneManagerPointer()->getSceneNode("The Player Parent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
+				//getSceneManagerPointer()->getSceneNode("StandardCameraParent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
 				getEnginePointer()->m_irrklangEngine->play2D("media/sounds/ophelia.mp3", true);
 				return;
 			}
@@ -133,85 +136,6 @@ namespace ve {
 		virtual ~EventListenerCollision() {};
 	};
 
-	class EventListenerMovement : public VEEventListenerGLFW {
-	protected:
-		bool onKeyboard(veEvent event) {
-			VEEventListenerGLFW::onKeyboard(event);
-
-			glm::vec4 translate = glm::vec4(0.0, 0.0, 0.0, 1.0);	//total translation
-			glm::vec4 rot4 = glm::vec4(1.0);						//total rotation around the axes, is 4d !
-			float angle = 0.0;
-			float rotSpeed = 2.0;
-
-			VESceneNode* pPlayer = getSceneManagerPointer()->getSceneNode("The PLayer0");
-			VESceneNode* pParent = pPlayer->getParent();
-
-			switch (event.idata1) {
-			case GLFW_KEY_A:
-				translate = pPlayer->getTransform() * glm::vec4(-1.0, 0.0, 0.0, 1.0);	//left
-				break;
-			case GLFW_KEY_D:
-				translate = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //right
-				break;
-			case GLFW_KEY_W:
-				translate = pPlayer->getTransform() * glm::vec4(0.0, 0.0, 1.0, 1.0); //forward
-				translate.y = 0.0f;
-				break;
-			case GLFW_KEY_S:
-				translate = pPlayer->getTransform() * glm::vec4(0.0, 0.0, -1.0, 1.0); //back
-				translate.y = 0.0f;
-				break;
-			case GLFW_KEY_Q:
-				translate = glm::vec4(0.0, -1.0, 0.0, 1.0); //down
-				break;
-			case GLFW_KEY_E:
-				translate = glm::vec4(0.0, 1.0, 0.0, 1.0);  //up
-				break;
-			case GLFW_KEY_LEFT:							//yaw rotation is already in parent space
-				angle = rotSpeed * (float)event.dt * -1.0f;
-				rot4 = glm::vec4(0.0, 1.0, 0.0, 1.0);
-				break;
-			case GLFW_KEY_RIGHT:						//yaw rotation is already in parent space
-				angle = rotSpeed * (float)event.dt * 1.0f;
-				rot4 = glm::vec4(0.0, 1.0, 0.0, 1.0);
-				break;
-			case GLFW_KEY_UP:							//pitch rotation is in cam/local space
-				angle = rotSpeed * (float)event.dt * 1.0f;			//pitch angle
-				rot4 = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
-				break;
-			case GLFW_KEY_DOWN:							//pitch rotation is in cam/local space
-				angle = rotSpeed * (float)event.dt * -1.0f;		//pitch angle
-				rot4 = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
-				break;
-
-			default:
-				return false;
-			};
-
-			if (pParent == nullptr) {
-				pParent = pPlayer;
-			}
-
-			///add the new translation vector to the previous one
-			float speed = 6.0f;
-			glm::vec3 trans = speed * glm::vec3(translate.x, translate.y, translate.z);
-			pParent->multiplyTransform(glm::translate(glm::mat4(1.0f), (float)event.dt * trans));
-
-			///combination of yaw and pitch, both wrt to parent space
-			glm::vec3  rot3 = glm::vec3(rot4.x, rot4.y, rot4.z);
-			glm::mat4  rotate = glm::rotate(glm::mat4(1.0), angle, rot3);
-			pPlayer->multiplyTransform(rotate);
-
-			return true;
-		}
-
-	public:
-		///Constructor of class EventListenerCollision
-		EventListenerMovement(std::string name) : VEEventListenerGLFW(name) { };
-
-		///Destructor of class EventListenerCollision
-		virtual ~EventListenerMovement() {};
-	};
 
 	///user defined manager class, derived from VEEngine
 	class MyVulkanEngine : public VEEngine {
@@ -224,9 +148,8 @@ namespace ve {
 		///Register an event listener to interact with the user
 
 		virtual void registerEventListeners() {
-			//VEEngine::registerEventListeners();
+			VEEngine::registerEventListeners();
 
-			registerEventListener(new EventListenerMovement("Movement"));
 			registerEventListener(new EventListenerCollision("Collision"), { veEvent::VE_EVENT_FRAME_STARTED });
 			registerEventListener(new EventListenerGUI("GUI"), { veEvent::VE_EVENT_DRAW_OVERLAY });
 		};
@@ -236,29 +159,7 @@ namespace ve {
 		///The engine uses Y-UP, Left-handed
 		virtual void loadLevel(uint32_t numLevel = 1) {
 
-			VESceneNode* cameraParent = getSceneManagerPointer()->createSceneNode("StandardCameraParent", getRoot(),
-				glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
-
-			//camera can only do yaw (parent y-axis) and pitch (local x-axis) rotations
-			VkExtent2D extent = getWindowPointer()->getExtent();
-			VECameraProjective* camera = (VECameraProjective*)getSceneManagerPointer()->createCamera("StandardCamera", VECamera::VE_CAMERA_TYPE_PROJECTIVE, cameraParent);
-			camera->m_nearPlane = 0.1f;
-			camera->m_farPlane = 500.1f;
-			camera->m_aspectRatio = extent.width / (float)extent.height;
-			camera->m_fov = 45.0f;
-			camera->lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-			getSceneManagerPointer()->setCamera(camera);
-
-			VELight* light4 = (VESpotLight*)getSceneManagerPointer()->createLight("StandardAmbientLight", VELight::VE_LIGHT_TYPE_AMBIENT, camera);
-			light4->m_col_ambient = glm::vec4(0.3f, 0.3f, 0.3f, 1.0f);
-
-			//use one light source
-			VELight* light1 = (VEDirectionalLight*)getSceneManagerPointer()->createLight("StandardDirLight", VELight::VE_LIGHT_TYPE_DIRECTIONAL, getRoot());     //new VEDirectionalLight("StandardDirLight");
-			light1->lookAt(glm::vec3(0.0f, 20.0f, -20.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-			light1->m_col_diffuse = glm::vec4(0.9f, 0.9f, 0.9f, 1.0f);
-			light1->m_col_specular = glm::vec4(0.4f, 0.4f, 0.4f, 1.0f);
-
-			registerEventListeners();
+			VEEngine::loadLevel(numLevel);
 
 			VESceneNode* pScene;
 			VECHECKPOINTER(pScene = getSceneManagerPointer()->createSceneNode("Level 1", getRoot()));
@@ -278,17 +179,17 @@ namespace ve {
 			VECHECKPOINTER(pE4 = (VEEntity*)getSceneManagerPointer()->getSceneNode("The Plane/plane_t_n_s.obj/plane/Entity_0"));
 			pE4->setParam(glm::vec4(1000.0f, 1000.0f, 0.0f, 0.0f));
 
-			VESceneNode* e1, * eParent;
-			eParent = getSceneManagerPointer()->createSceneNode("The Cube Parent", pScene, glm::mat4(1.0));
+			VESceneNode* e1, * e1Parent;
+			e1Parent = getSceneManagerPointer()->createSceneNode("The Cube Parent", pScene, glm::mat4(1.0));
 			VECHECKPOINTER(e1 = getSceneManagerPointer()->loadModel("The Cube0", "media/models/test/crate0", "cube.obj"));
-			eParent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-10.0f, 1.0f, 10.0f)));
-			eParent->addChild(e1);
+			e1Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-10.0f, 1.0f, 10.0f)));
+			e1Parent->addChild(e1);
 
-			VESceneNode* e2;
-			eParent = getSceneManagerPointer()->createSceneNode("The Player Parent", pScene, glm::mat4(1.0));
+			VESceneNode* e2, * e2Parent;
+			e2Parent = getSceneManagerPointer()->createSceneNode("The Player Parent", pScene, glm::mat4(1.0));
 			VECHECKPOINTER(e2 = getSceneManagerPointer()->loadModel("The PLayer0", "media/models/test/crate1", "cube.obj"));
-			eParent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, 1.0f)));
-			eParent->addChild(e2);
+			e2Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 5.0f)));
+			e2Parent->addChild(e2);
 
 
 			m_irrklangEngine->play2D("media/sounds/ophelia.mp3", true);
