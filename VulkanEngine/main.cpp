@@ -14,7 +14,7 @@ namespace ve {
 
 
 	uint32_t g_score = 0;				//derzeitiger Punktestand
-	double g_time = 10.0;				//zeit die noch übrig ist
+	double g_time = 30.0;				//zeit die noch übrig ist
 	bool g_gameLost = false;			//true... das Spiel wurde verloren
 	bool g_restart = false;			//true...das Spiel soll neu gestartet werden
 
@@ -83,8 +83,8 @@ namespace ve {
 				g_time = 30;
 				g_score = 0;
 				getSceneManagerPointer()->getSceneNode("The Cube Parent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
-				//getSceneManagerPointer()->getSceneNode("The Player Parent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
-				//getSceneManagerPointer()->getSceneNode("StandardCameraParent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
+				getSceneManagerPointer()->getSceneNode("The Player Parent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
+				getSceneManagerPointer()->getSceneNode("StandardCameraParent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
 				getEnginePointer()->m_irrklangEngine->play2D("media/sounds/ophelia.mp3", true);
 				return;
 			}
@@ -92,11 +92,9 @@ namespace ve {
 
 			glm::vec3 positionCube = getSceneManagerPointer()->getSceneNode("The Cube Parent")->getPosition();
 			glm::vec3 positionPlayer = getSceneManagerPointer()->getSceneNode("The Player Parent")->getPosition();
-			glm::vec3 positionCamera = getSceneManagerPointer()->getSceneNode("StandardCameraParent")->getPosition();
 
-			float distanceCube = glm::length(positionCube - positionCamera);
-			float distancePlayer = glm::length(positionPlayer - positionCamera);
-			if (distanceCube < 1 || distancePlayer < 1) {
+			float distanceCube = glm::length(positionCube - positionPlayer);
+			if (distanceCube < 1) {
 				g_score++;
 				getEnginePointer()->m_irrklangEngine->play2D("media/sounds/explosion.wav", false);
 				if (g_score % 10 == 0) {
@@ -110,13 +108,6 @@ namespace ve {
 
 					getSceneManagerPointer()->deleteSceneNodeAndChildren("The Cube" + std::to_string(cubeid));
 					VECHECKPOINTER(getSceneManagerPointer()->loadModel("The Cube" + std::to_string(++cubeid), "media/models/test/crate0", "cube.obj", 0, eParent));
-				}
-				if (distancePlayer < 1) {
-					VESceneNode* eParent = getSceneManagerPointer()->getSceneNode("The Player Parent");
-					eParent->setPosition(glm::vec3(d(e), 1.0f, d(e)));
-
-					getSceneManagerPointer()->deleteSceneNodeAndChildren("The Player" + std::to_string(cubeid));
-					VECHECKPOINTER(getSceneManagerPointer()->loadModel("The Player" + std::to_string(++cubeid), "media/models/test/crate1", "cube.obj", 0, eParent));
 				}
 			}
 

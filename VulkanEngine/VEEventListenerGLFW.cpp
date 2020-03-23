@@ -39,6 +39,7 @@ namespace ve {
 		glm::vec4 rot4 = glm::vec4(1.0);						//total rotation around the axes, is 4d !
 		float angle = 0.0;
 		float rotSpeed = 2.0;
+		double rotTransSpeed = glm::pi<float>();
 
 		VECamera* pCamera = getSceneManagerPointer()->getCamera();
 		VESceneNode* pcParent = pCamera->getParent();
@@ -64,18 +65,35 @@ namespace ve {
 		case GLFW_KEY_E:
 			translate = glm::vec4(0.0, 1.0, 0.0, 1.0);  //up
 			break;
+		case GLFW_KEY_LEFT:							//yaw rotation is already in parent space
+			angle = rotSpeed * (float)event.dt * -1.0f;
+			rot4 = glm::vec4(0.0, 1.0, 0.0, 1.0);
+			translate = rotTransSpeed * pCamera->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //right
+			break;
+		case GLFW_KEY_RIGHT:						//yaw rotation is already in parent space
+			angle = rotSpeed * (float)event.dt * 1.0f;
+			rot4 = glm::vec4(0.0, 1.0, 0.0, 1.0);
+			translate = rotTransSpeed * pCamera->getTransform() * glm::vec4(-1.0, 0.0, 0.0, 1.0);	//left
+			break;
 		}
 		if (pcParent == nullptr) {
 			pcParent = pCamera;
 		}
 
-		std::printf("[%s]\n", pCamera->getTransform());
 
 		///add the new translation vector to the previous one
 		float speed = 6.0f;
 		glm::vec3 trans = speed * glm::vec3(translate.x, translate.y, translate.z);
 		pcParent->multiplyTransform(glm::translate(glm::mat4(1.0f), (float)event.dt * trans));
 
+		///combination of yaw and pitch, both wrt to parent space
+		glm::vec3  rot3 = glm::vec3(rot4.x, rot4.y, rot4.z);
+		glm::mat4  rotate = glm::rotate(glm::mat4(1.0), angle, rot3);
+		pCamera->multiplyTransform(rotate);
+
+		//reset translations
+		translate = glm::vec4(0.0, 0.0, 0.0, 1.0);	//total translation
+		rot4 = glm::vec4(1.0);						//total rotation around the axes, is 4d !
 
 		VESceneNode* pPlayer = getSceneManagerPointer()->getSceneNode("The PLayer0");
 		VESceneNode* pParent = pPlayer->getParent();
@@ -109,14 +127,14 @@ namespace ve {
 			angle = rotSpeed * (float)event.dt * 1.0f;
 			rot4 = glm::vec4(0.0, 1.0, 0.0, 1.0);
 			break;
-		case GLFW_KEY_UP:							//pitch rotation is in cam/local space
-			angle = rotSpeed * (float)event.dt * 1.0f;			//pitch angle
-			rot4 = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
-			break;
-		case GLFW_KEY_DOWN:							//pitch rotation is in cam/local space
-			angle = rotSpeed * (float)event.dt * -1.0f;		//pitch angle
-			rot4 = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
-			break;
+		//case GLFW_KEY_UP:							//pitch rotation is in cam/local space
+		//	angle = rotSpeed * (float)event.dt * 1.0f;			//pitch angle
+		//	rot4 = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
+		//	break;
+		//case GLFW_KEY_DOWN:							//pitch rotation is in cam/local space
+		//	angle = rotSpeed * (float)event.dt * -1.0f;		//pitch angle
+		//	rot4 = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
+		//	break;
 
 		default:
 			return false;
@@ -132,8 +150,8 @@ namespace ve {
 		pParent->multiplyTransform(glm::translate(glm::mat4(1.0f), (float)event.dt * trans));
 
 		///combination of yaw and pitch, both wrt to parent space
-		glm::vec3  rot3 = glm::vec3(rot4.x, rot4.y, rot4.z);
-		glm::mat4  rotate = glm::rotate(glm::mat4(1.0), angle, rot3);
+		rot3 = glm::vec3(rot4.x, rot4.y, rot4.z);
+		rotate = glm::rotate(glm::mat4(1.0), angle, rot3);
 		pPlayer->multiplyTransform(rotate);
 
 		return true;
@@ -153,6 +171,7 @@ namespace ve {
 	*/
 	bool VEEventListenerGLFW::onMouseMove(veEvent event) {
 
+		if (true) return false;
 		if (!m_rightButtonClicked) return false;		//only do something if left mouse button is pressed
 
 		float x = event.fdata1;
