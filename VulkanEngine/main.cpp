@@ -200,9 +200,12 @@ namespace ve {
 
 			for (int i = 0; i < 100; i++) {
 				VESceneNode* e1, * e1Parent;
+				float x = rand() % 500 + 500;
+				float y = rand() % 20;
+				float z = rand() % 500 + 500;
 				e1Parent = getSceneManagerPointer()->createSceneNode("The Cube" + std::to_string(i) + " Parent", pScene, glm::mat4(1.0));
 				VECHECKPOINTER(e1 = getSceneManagerPointer()->loadModel("The Cube" + std::to_string(i), "media/models/test/crate0", "cube.obj"));
-				e1Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(d(e), 1, d(e))));
+				e1Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(x, y, z)));
 				e1Parent->addChild(e1);
 			}
 

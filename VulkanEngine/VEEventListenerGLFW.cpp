@@ -122,7 +122,6 @@ namespace ve {
 	*/
 	bool VEEventListenerGLFW::onMouseMove(veEvent event) {
 
-		if (true) return false;
 		if (!m_rightButtonClicked) return false;		//only do something if left mouse button is pressed
 
 		float x = event.fdata1;
@@ -203,8 +202,6 @@ namespace ve {
 	*
 	*/
 	bool VEEventListenerGLFW::onMouseScroll(veEvent event) {
-
-		if (true) return false;
 
 		float xoffset = event.fdata1;
 		float yoffset = event.fdata2;
