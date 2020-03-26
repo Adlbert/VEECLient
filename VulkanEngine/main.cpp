@@ -7,6 +7,7 @@
 
 
 #include "VEInclude.h"
+#include "glm/ext.hpp"
 
 
 
@@ -83,8 +84,8 @@ namespace ve {
 				g_time = 30;
 				g_score = 0;
 				getSceneManagerPointer()->getSceneNode("The Cube Parent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
-				getSceneManagerPointer()->getSceneNode("The Player Parent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
-				getSceneManagerPointer()->getSceneNode("StandardCameraParent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
+				//getSceneManagerPointer()->getSceneNode("The Player Parent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
+				//getSceneManagerPointer()->getSceneNode("StandardCameraParent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
 				getEnginePointer()->m_irrklangEngine->play2D("media/sounds/ophelia.mp3", true);
 				return;
 			}
@@ -127,6 +128,28 @@ namespace ve {
 		virtual ~EventListenerCollision() {};
 	};
 
+	//
+	//Ádjust the camera to look at the player
+	//
+	class EventListenerCameraMovement : public VEEventListener {
+	protected:
+		virtual void onFrameStarted(veEvent event) {
+			glm::vec3 positionPlayer = getSceneManagerPointer()->getSceneNode("The Player Parent")->getPosition();
+
+			getSceneManagerPointer()->getCamera()->getParent()->lookAt(
+				glm::vec3(positionPlayer.x, positionPlayer.y + 3, positionPlayer.z - 10),
+				glm::vec3(positionPlayer.x, positionPlayer.y + 20, positionPlayer.z + 100),
+				glm::vec3(0, 1, 0));
+		};
+
+	public:
+		///Constructor of class EventListenerCollision
+		EventListenerCameraMovement(std::string name) : VEEventListener(name) { };
+
+		///Destructor of class EventListenerCollision
+		virtual ~EventListenerCameraMovement() {};
+	};
+
 
 	///user defined manager class, derived from VEEngine
 	class MyVulkanEngine : public VEEngine {
@@ -142,6 +165,7 @@ namespace ve {
 			VEEngine::registerEventListeners();
 
 			registerEventListener(new EventListenerCollision("Collision"), { veEvent::VE_EVENT_FRAME_STARTED });
+			registerEventListener(new EventListenerCameraMovement("CameraMovement"), { veEvent::VE_EVENT_FRAME_STARTED });
 			registerEventListener(new EventListenerGUI("GUI"), { veEvent::VE_EVENT_DRAW_OVERLAY });
 		};
 
@@ -149,6 +173,7 @@ namespace ve {
 		///Load the first level into the game engine
 		///The engine uses Y-UP, Left-handed
 		virtual void loadLevel(uint32_t numLevel = 1) {
+
 
 			VEEngine::loadLevel(numLevel);
 
@@ -182,9 +207,7 @@ namespace ve {
 			e2Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 5.0f)));
 			e2Parent->addChild(e2);
 
-
 			m_irrklangEngine->play2D("media/sounds/ophelia.mp3", true);
-
 		};
 	};
 
