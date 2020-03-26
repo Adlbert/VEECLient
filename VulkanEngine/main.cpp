@@ -83,7 +83,7 @@ namespace ve {
 				g_restart = false;
 				g_time = 30;
 				g_score = 0;
-				getSceneManagerPointer()->getSceneNode("The Cube Parent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
+				getSceneManagerPointer()->getSceneNode("The Cube0 Parent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
 				//getSceneManagerPointer()->getSceneNode("The Player Parent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
 				//getSceneManagerPointer()->getSceneNode("StandardCameraParent")->setPosition(glm::vec3(d(e), 1.0f, d(e)));
 				getEnginePointer()->m_irrklangEngine->play2D("media/sounds/ophelia.mp3", true);
@@ -91,7 +91,7 @@ namespace ve {
 			}
 			if (g_gameLost) return;
 
-			glm::vec3 positionCube = getSceneManagerPointer()->getSceneNode("The Cube Parent")->getPosition();
+			glm::vec3 positionCube = getSceneManagerPointer()->getSceneNode("The Cube0 Parent")->getPosition();
 			glm::vec3 positionPlayer = getSceneManagerPointer()->getSceneNode("The Player Parent")->getPosition();
 
 			float distanceCube = glm::length(positionCube - positionPlayer);
@@ -104,7 +104,7 @@ namespace ve {
 				}
 
 				if (distanceCube < 1) {
-					VESceneNode* eParent = getSceneManagerPointer()->getSceneNode("The Cube Parent");
+					VESceneNode* eParent = getSceneManagerPointer()->getSceneNode("The Cube0 Parent");
 					eParent->setPosition(glm::vec3(d(e), 1.0f, d(e)));
 
 					getSceneManagerPointer()->deleteSceneNodeAndChildren("The Cube" + std::to_string(cubeid));
@@ -129,24 +129,27 @@ namespace ve {
 	};
 
 	//
-	//Ádjust the camera to look at the player
+	//Adjust the camera to look at the player
 	//
 	class EventListenerCameraMovement : public VEEventListener {
+
 	protected:
 		virtual void onFrameStarted(veEvent event) {
 			glm::vec3 positionPlayer = getSceneManagerPointer()->getSceneNode("The Player Parent")->getPosition();
+			ve::VESceneNode* pCamera = getSceneManagerPointer()->getCamera()->getParent();
 
-			getSceneManagerPointer()->getCamera()->getParent()->lookAt(
+			pCamera->lookAt(
 				glm::vec3(positionPlayer.x, positionPlayer.y + 3, positionPlayer.z - 10),
 				glm::vec3(positionPlayer.x, positionPlayer.y + 20, positionPlayer.z + 100),
 				glm::vec3(0, 1, 0));
 		};
 
+
 	public:
-		///Constructor of class EventListenerCollision
+		///Constructor of class EventListenerCameraMocement
 		EventListenerCameraMovement(std::string name) : VEEventListener(name) { };
 
-		///Destructor of class EventListenerCollision
+		///Destructor of class EventListenerCameraMocement
 		virtual ~EventListenerCameraMovement() {};
 	};
 
@@ -164,8 +167,8 @@ namespace ve {
 		virtual void registerEventListeners() {
 			VEEngine::registerEventListeners();
 
-			registerEventListener(new EventListenerCollision("Collision"), { veEvent::VE_EVENT_FRAME_STARTED });
 			registerEventListener(new EventListenerCameraMovement("CameraMovement"), { veEvent::VE_EVENT_FRAME_STARTED });
+			registerEventListener(new EventListenerCollision("Collision"), { veEvent::VE_EVENT_FRAME_STARTED });
 			registerEventListener(new EventListenerGUI("GUI"), { veEvent::VE_EVENT_DRAW_OVERLAY });
 		};
 
@@ -195,11 +198,13 @@ namespace ve {
 			VECHECKPOINTER(pE4 = (VEEntity*)getSceneManagerPointer()->getSceneNode("The Plane/plane_t_n_s.obj/plane/Entity_0"));
 			pE4->setParam(glm::vec4(1000.0f, 1000.0f, 0.0f, 0.0f));
 
-			VESceneNode* e1, * e1Parent;
-			e1Parent = getSceneManagerPointer()->createSceneNode("The Cube Parent", pScene, glm::mat4(1.0));
-			VECHECKPOINTER(e1 = getSceneManagerPointer()->loadModel("The Cube0", "media/models/test/crate0", "cube.obj"));
-			e1Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(-10.0f, 1.0f, 10.0f)));
-			e1Parent->addChild(e1);
+			for (int i = 0; i < 100; i++) {
+				VESceneNode* e1, * e1Parent;
+				e1Parent = getSceneManagerPointer()->createSceneNode("The Cube" + std::to_string(i) + " Parent", pScene, glm::mat4(1.0));
+				VECHECKPOINTER(e1 = getSceneManagerPointer()->loadModel("The Cube" + std::to_string(i), "media/models/test/crate0", "cube.obj"));
+				e1Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(d(e), 1, d(e))));
+				e1Parent->addChild(e1);
+			}
 
 			VESceneNode* e2, * e2Parent;
 			e2Parent = getSceneManagerPointer()->createSceneNode("The Player Parent", pScene, glm::mat4(1.0));
