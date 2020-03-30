@@ -145,7 +145,7 @@ namespace ve {
 
 			pCamera->lookAt(
 				glm::vec3(positionPlayer.x, positionPlayer.y + 3, positionPlayer.z - 10),
-				glm::vec3(positionPlayer.x, positionPlayer.y + 20, positionPlayer.z + 100),
+				glm::vec3(positionPlayer.x, positionPlayer.y, positionPlayer.z + 100),
 				glm::vec3(0, 1, 0));
 		};
 
