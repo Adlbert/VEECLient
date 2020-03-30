@@ -46,7 +46,7 @@ namespace ve {
 		float rotSpeed = 2.0;
 		constexpr float rotTransSpeed = glm::pi<float>();
 
-		VESceneNode* pPlayer = getSceneManagerPointer()->getSceneNode("The PLayer0");
+		VESceneNode* pPlayer = getSceneManagerPointer()->getSceneNode("The PLayer");
 		VESceneNode* pParent = pPlayer->getParent();
 
 		switch (event.idata1) {
