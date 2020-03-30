@@ -158,6 +158,112 @@ namespace ve {
 		virtual ~EventListenerCameraMovement() {};
 	};
 
+	//
+	//Adjust the camera to look at the player
+	//
+	class EventListenerKeyboardBindings : public VEEventListenerGLFW {
+
+	protected:
+		virtual bool onKeyboard(veEvent event) {
+			if (event.idata1 == GLFW_KEY_ESCAPE) {				//ESC pressed - end the engine
+				getEnginePointer()->end();
+				return true;
+			}
+
+			if (event.idata3 == GLFW_RELEASE) return false;
+
+			if (event.idata1 == GLFW_KEY_P && event.idata3 == GLFW_PRESS) {
+				m_makeScreenshot = true;
+				return false;
+			}
+			if (event.idata1 == GLFW_KEY_O && event.idata3 == GLFW_PRESS) {
+				m_makeScreenshotDepth = true;
+				return false;
+			}
+
+			///create some default constants for the actions 
+			float speed;
+			glm::vec3 trans;
+			glm::vec3  rot3;
+			glm::mat4  rotate;
+
+			glm::vec4 translate = glm::vec4(0.0, 0.0, 0.0, 1.0);	//total translation
+			glm::vec4 rot4 = glm::vec4(1.0);						//total rotation around the axes, is 4d !
+			float angle = 0.0;
+			float rotSpeed = 2.0;
+			constexpr float rotTransSpeed = glm::pi<float>();
+
+			VESceneNode* pPlayer = getSceneManagerPointer()->getSceneNode("The PLayer");
+			VESceneNode* pParent = pPlayer->getParent();
+
+			switch (event.idata1) {
+			case GLFW_KEY_A:
+				translate = pPlayer->getTransform() * glm::vec4(-1.0, 0.0, 0.0, 1.0);	//left
+				break;
+			case GLFW_KEY_D:
+				translate = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //right
+				break;
+			case GLFW_KEY_W:
+				translate = pPlayer->getTransform() * glm::vec4(0.0, 0.0, 1.0, 1.0); //forward
+				translate.y = 0.0f;
+				break;
+			case GLFW_KEY_S:
+				translate = pPlayer->getTransform() * glm::vec4(0.0, 0.0, -1.0, 1.0); //back
+				translate.y = 0.0f;
+				break;
+			case GLFW_KEY_Q:
+				translate = glm::vec4(0.0, -1.0, 0.0, 1.0); //down
+				break;
+			case GLFW_KEY_E:
+				translate = glm::vec4(0.0, 1.0, 0.0, 1.0);  //up
+				break;
+			case GLFW_KEY_LEFT:							//yaw rotation is already in parent space
+				angle = rotSpeed * (float)event.dt * -1.0f;
+				rot4 = glm::vec4(0.0, 1.0, 0.0, 1.0);
+				break;
+			case GLFW_KEY_RIGHT:						//yaw rotation is already in parent space
+				angle = rotSpeed * (float)event.dt * 1.0f;
+				rot4 = glm::vec4(0.0, 1.0, 0.0, 1.0);
+				break;
+			case GLFW_KEY_UP:							//pitch rotation is in cam/local space
+				angle = rotSpeed * (float)event.dt * 1.0f;			//pitch angle
+				rot4 = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
+				break;
+			case GLFW_KEY_DOWN:							//pitch rotation is in cam/local space
+				angle = rotSpeed * (float)event.dt * -1.0f;		//pitch angle
+				rot4 = pPlayer->getTransform() * glm::vec4(1.0, 0.0, 0.0, 1.0); //x axis from local to parent space!
+				break;
+
+			default:
+				return false;
+			};
+
+			if (pParent == nullptr) {
+				pParent = pPlayer;
+			}
+
+			///add the new translation vector to the previous one
+			speed = 6.0f;
+			trans = speed * glm::vec3(translate.x, translate.y, translate.z);
+			pParent->multiplyTransform(glm::translate(glm::mat4(1.0f), (float)event.dt * trans));
+
+			///combination of yaw and pitch, both wrt to parent space
+			rot3 = glm::vec3(rot4.x, rot4.y, rot4.z);
+			rotate = glm::rotate(glm::mat4(1.0), angle, rot3);
+			pPlayer->multiplyTransform(rotate);
+
+			return true;
+		}
+
+
+	public:
+		///Constructor of class EventListenerCameraMocement
+		EventListenerKeyboardBindings(std::string name) : VEEventListenerGLFW(name) { };
+
+		///Destructor of class EventListenerCameraMocement
+		virtual ~EventListenerKeyboardBindings() {};
+	};
+
 
 	///user defined manager class, derived from VEEngine
 	class MyVulkanEngine : public VEEngine {
@@ -170,8 +276,7 @@ namespace ve {
 		///Register an event listener to interact with the user
 
 		virtual void registerEventListeners() {
-			VEEngine::registerEventListeners();
-
+			registerEventListener(new EventListenerKeyboardBindings("KeyboardBindings"));
 			registerEventListener(new EventListenerCameraMovement("CameraMovement"), { veEvent::VE_EVENT_FRAME_STARTED });
 			registerEventListener(new EventListenerCollision("Collision"), { veEvent::VE_EVENT_FRAME_STARTED });
 			registerEventListener(new EventListenerGUI("GUI"), { veEvent::VE_EVENT_DRAW_OVERLAY });
