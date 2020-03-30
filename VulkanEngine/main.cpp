@@ -15,7 +15,7 @@ namespace ve {
 
 
 	uint32_t g_score = 0;				//derzeitiger Punktestand
-	double g_time = 10.0;				//zeit die noch übrig ist
+	double g_time = 30.0;				//zeit die noch übrig ist
 	bool g_gameLost = false;			//true... das Spiel wurde verloren
 	bool g_restart = false;			//true...das Spiel soll neu gestartet werden
 
