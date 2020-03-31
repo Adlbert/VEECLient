@@ -17,7 +17,10 @@ namespace ve {
 	uint32_t g_score = 0;				//derzeitiger Punktestand
 	double g_time = 30.0;				//zeit die noch übrig ist
 	bool g_gameLost = false;			//true... das Spiel wurde verloren
+	bool g_gameWon = false;			//true... das Spiel wurde gewonnen
 	bool g_restart = false;			//true...das Spiel soll neu gestartet werden
+	int g_difficulty = 1;			//true...das Spiel soll neu gestartet werden
+	std::list<int> cubeIds;
 
 	//
 	//Zeichne das GUI
@@ -31,7 +34,7 @@ namespace ve {
 
 			struct nk_context* ctx = pSubrender->getContext();
 
-			if (!g_gameLost) {
+			if (!g_gameLost && !g_gameWon) {
 				if (nk_begin(ctx, "", nk_rect(0, 0, 200, 170), NK_WINDOW_BORDER)) {
 					char outbuffer[100];
 					nk_layout_row_dynamic(ctx, 45, 1);
@@ -41,6 +44,15 @@ namespace ve {
 					nk_layout_row_dynamic(ctx, 45, 1);
 					sprintf(outbuffer, "Time: %004.1lf", g_time);
 					nk_label(ctx, outbuffer, NK_TEXT_LEFT);
+				}
+			}
+			else if (g_gameWon) {
+				if (nk_begin(ctx, "", nk_rect(500, 500, 200, 170), NK_WINDOW_BORDER)) {
+					nk_layout_row_dynamic(ctx, 45, 1);
+					nk_label(ctx, "Game Won!!!", NK_TEXT_LEFT);
+					if (nk_button_label(ctx, "Next Level")) {
+						g_restart = true;
+					}
 				}
 			}
 			else {
@@ -74,7 +86,7 @@ namespace ve {
 	//
 	class EventListenerCollision : public VEEventListener {
 	private:
-		std::list<int> deletedCubes;
+		std::list<int> deletedCubeIds;
 
 	protected:
 		virtual void onFrameStarted(veEvent event) {
@@ -82,20 +94,22 @@ namespace ve {
 
 			if (g_restart) {
 				g_gameLost = false;
-
+				g_gameWon = false;
 				g_restart = false;
 				g_time = 30;
 				g_score = 0;
+				g_difficulty++;
+				PlaceCubes(getSceneManagerPointer()->getSceneNode("Level 1"), g_difficulty);
 				getSceneManagerPointer()->getSceneNode("The Player Parent")->setPosition(glm::vec3(0.0f, 1.0f, 5.0f));
 				getEnginePointer()->m_irrklangEngine->play2D("media/sounds/ophelia.mp3", true);
 				return;
 			}
-			if (g_gameLost) return;
+			if (g_gameLost || g_gameWon) return;
 
 			glm::vec3 positionPlayer = getSceneManagerPointer()->getSceneNode("The Player Parent")->getPosition();
-			for (int i = 0; i < 10; i++) {
+			for (std::list<int>::iterator it = cubeIds.begin(); it != cubeIds.end(); ++it) {
 
-				glm::vec3 positionCube = getSceneManagerPointer()->getSceneNode("The Cube" + std::to_string(i) + " Parent")->getPosition();
+				glm::vec3 positionCube = getSceneManagerPointer()->getSceneNode("The Cube" + std::to_string(*it) + " Parent")->getPosition();
 
 				float distanceCube = glm::length(positionCube - positionPlayer);
 				if (distanceCube < 1) {
@@ -107,17 +121,20 @@ namespace ve {
 					}
 
 					if (distanceCube < 1) {
-						VESceneNode* eParent = getSceneManagerPointer()->getSceneNode("The Cube" + std::to_string(i) + " Parent");
-						eParent->setPosition(glm::vec3(d(e), 1.0f, d(e)));
-
-						getSceneManagerPointer()->deleteSceneNodeAndChildren("The Cube" + std::to_string(i));
-						VECHECKPOINTER(getSceneManagerPointer()->loadModel("The Cube" + std::to_string(i), "media/models/test/crate0", "cube.obj", 0, eParent));
-
+						getSceneManagerPointer()->deleteSceneNodeAndChildren("The Cube" + std::to_string(*it));
+						deletedCubeIds.push_back(*it);
+						cubeIds.remove(*it);
+						break;
 					}
 				}
 			}
 
 			g_time -= event.dt;
+			if (cubeIds.size() == 0) {
+				g_gameWon = true;
+				getEnginePointer()->m_irrklangEngine->removeAllSoundSources();
+				getEnginePointer()->m_irrklangEngine->play2D("media/sounds/bell.wav", false);
+			}
 			if (g_time <= 0) {
 				g_gameLost = true;
 				getEnginePointer()->m_irrklangEngine->removeAllSoundSources();
@@ -131,6 +148,25 @@ namespace ve {
 
 		///Destructor of class EventListenerCollision
 		virtual ~EventListenerCollision() {};
+
+		void PlaceCubes(VESceneNode* pScene, int dif = 1) {
+			for (int i = 0; i < dif * 10; i++) {
+				VESceneNode* e1, * e1Parent;
+				e1Parent = getSceneManagerPointer()->createSceneNode("The Cube" + std::to_string(i) + " Parent", pScene, glm::mat4(1.0));
+				VECHECKPOINTER(e1 = getSceneManagerPointer()->loadModel("The Cube" + std::to_string(i), "media/models/test/crate0", "cube.obj"));
+				for (std::list<int>::iterator it = deletedCubeIds.begin(); it != deletedCubeIds.end(); ++it) {
+					if (i == *it) {
+						e1Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(d(e), 0.0f, d(e))));
+						deletedCubeIds.remove(*it);
+						break;
+					}
+					if (*it == deletedCubeIds.size() + 1)
+						e1Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(d(e), -1.0f, d(e))));
+				}
+				e1Parent->addChild(e1);
+				cubeIds.push_back(i);
+			}
+		}
 	};
 
 	//
@@ -144,8 +180,8 @@ namespace ve {
 			ve::VESceneNode* pCamera = getSceneManagerPointer()->getCamera()->getParent();
 
 			pCamera->lookAt(
-				glm::vec3(positionPlayer.x, positionPlayer.y + 3, positionPlayer.z - 10),
-				glm::vec3(positionPlayer.x, positionPlayer.y, positionPlayer.z + 100),
+				glm::vec3(positionPlayer.x, positionPlayer.y + 30, positionPlayer.z),
+				glm::vec3(positionPlayer.x, positionPlayer.y, positionPlayer.z),
 				glm::vec3(0, 1, 0));
 		};
 
@@ -308,25 +344,28 @@ namespace ve {
 			VECHECKPOINTER(pE4 = (VEEntity*)getSceneManagerPointer()->getSceneNode("The Plane/plane_t_n_s.obj/plane/Entity_0"));
 			pE4->setParam(glm::vec4(1000.0f, 1000.0f, 0.0f, 0.0f));
 
-			for (int i = 0; i < 10; i++) {
-				VESceneNode* e1, * e1Parent;
-				e1Parent = getSceneManagerPointer()->createSceneNode("The Cube" + std::to_string(i) + " Parent", pScene, glm::mat4(1.0));
-				VECHECKPOINTER(e1 = getSceneManagerPointer()->loadModel("The Cube" + std::to_string(i), "media/models/test/crate0", "cube.obj"));
-				e1Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(d(e), 1.0f, d(e))));
-				e1Parent->addChild(e1);
-			}
-
 			VESceneNode* e2, * e2Parent;
 			e2Parent = getSceneManagerPointer()->createSceneNode("The Player Parent", pScene, glm::mat4(1.0));
 			VECHECKPOINTER(e2 = getSceneManagerPointer()->loadModel("The PLayer", "media/models/test/crate1", "cube.obj"));
 			e2Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, -15.0f)));
 			e2Parent->addChild(e2);
 
+			PlaceCubes(pScene);
+
 			m_irrklangEngine->play2D("media/sounds/ophelia.mp3", true);
 		};
+
+		void PlaceCubes(VESceneNode* pScene) {
+			for (int i = 0; i < 10; i++) {
+				VESceneNode* e1, * e1Parent;
+				e1Parent = getSceneManagerPointer()->createSceneNode("The Cube" + std::to_string(i) + " Parent", pScene, glm::mat4(1.0));
+				VECHECKPOINTER(e1 = getSceneManagerPointer()->loadModel("The Cube" + std::to_string(i), "media/models/test/crate0", "cube.obj"));
+				e1Parent->multiplyTransform(glm::translate(glm::mat4(1.0f), glm::vec3(d(e), 1.0f, d(e))));
+				e1Parent->addChild(e1);
+				cubeIds.push_back(i);
+			}
+		}
 	};
-
-
 }
 
 using namespace ve;
