@@ -98,7 +98,6 @@ namespace ve {
 				g_restart = false;
 				g_time = 30;
 				g_score = 0;
-				g_difficulty++;
 				PlaceCubes(getSceneManagerPointer()->getSceneNode("Level 1"), g_difficulty);
 				getSceneManagerPointer()->getSceneNode("The Player Parent")->setPosition(glm::vec3(0.0f, 1.0f, 5.0f));
 				getEnginePointer()->m_irrklangEngine->play2D("media/sounds/ophelia.mp3", true);
@@ -132,6 +131,7 @@ namespace ve {
 			g_time -= event.dt;
 			if (cubeIds.size() == 0) {
 				g_gameWon = true;
+				g_difficulty++;
 				getEnginePointer()->m_irrklangEngine->removeAllSoundSources();
 				getEnginePointer()->m_irrklangEngine->play2D("media/sounds/bell.wav", false);
 			}
