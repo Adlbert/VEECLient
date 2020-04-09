@@ -300,6 +300,25 @@ namespace ve {
 		virtual ~EventListenerKeyboardBindings() {};
 	};
 
+	//
+	//Adjust the camera to look at the player
+	//
+	class EventListenerEncodeFrame : public VEEventListenerGLFW {
+
+	protected:
+		virtual void OnFrameEnded(veEvent event) {
+
+		};
+
+
+	public:
+		///Constructor of class EventListenerCameraMocement
+		EventListenerEncodeFrame(std::string name) : VEEventListenerGLFW(name) { };
+
+		///Destructor of class EventListenerCameraMocement
+		virtual ~EventListenerEncodeFrame() {};
+	};
+
 
 	///user defined manager class, derived from VEEngine
 	class MyVulkanEngine : public VEEngine {
@@ -313,6 +332,7 @@ namespace ve {
 
 		virtual void registerEventListeners() {
 			registerEventListener(new EventListenerKeyboardBindings("KeyboardBindings"));
+			registerEventListener(new EventListenerEncodeFrame("EncodeFrame"), { veEvent::VE_EVENT_FRAME_ENDED });
 			registerEventListener(new EventListenerCameraMovement("CameraMovement"), { veEvent::VE_EVENT_FRAME_STARTED });
 			registerEventListener(new EventListenerCollision("Collision"), { veEvent::VE_EVENT_FRAME_STARTED });
 			registerEventListener(new EventListenerGUI("GUI"), { veEvent::VE_EVENT_DRAW_OVERLAY });
@@ -373,8 +393,8 @@ using namespace ve;
 #include <stdio.h>
 
 extern "C" {
-	#include <libavformat/avformat.h>
-	#include <libavutil/dict.h>
+#include <libavformat/avformat.h>
+#include <libavutil/dict.h>
 }
 
 int main() {
@@ -382,6 +402,7 @@ int main() {
 	bool debug = true;
 
 	MyVulkanEngine mve(debug);	//enable or disable debugging (=callback, validation layers)
+
 
 	mve.initEngine();
 	mve.loadLevel(1);
