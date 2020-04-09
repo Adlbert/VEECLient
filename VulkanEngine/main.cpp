@@ -370,6 +370,13 @@ namespace ve {
 
 using namespace ve;
 
+#include <stdio.h>
+
+extern "C" {
+	#include <libavformat/avformat.h>
+	#include <libavutil/dict.h>
+}
+
 int main() {
 
 	bool debug = true;
@@ -379,7 +386,6 @@ int main() {
 	mve.initEngine();
 	mve.loadLevel(1);
 	mve.run();
-
 	return 0;
 }
 
