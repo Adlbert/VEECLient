@@ -80,9 +80,9 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>$(Vulkan_SDK)\Include;$(SolutionDir)\external\glm;$(SolutionDir)\external\stb;$(SolutionDir)\external\glfw\glfw-3.2.1.bin.WIN64\include;$(SolutionDir)\external\Assimp\include;$(SolutionDir)\external\gli-master;$(SolutionDir)\external\nuklear;$(SolutionDir)\external\threadpool;$(SolutionDir)\external\irrKlang\include;$(IncludePath)</IncludePath>
-    <LibraryPath>$(SolutionDir)\external\glfw\glfw-3.2.1.bin.WIN64\lib-vc2015;$(Vulkan_SDK)\Lib;$(SolutionDir)\external\Assimp\lib\x64\Debug;$(LibraryPath);$(SolutionDir)\external\irrKlang\lib</LibraryPath>
-    <OutDir>$(SolutionDir)\bin\$(Platform)\$(Configuration)\</OutDir>
+    <IncludePath>$(Vulkan_SDK)\Include;$(SolutionDir)\external\glm;$(SolutionDir)\external\stb;$(SolutionDir)\external\glfw\glfw-3.2.1.bin.WIN64\include;$(SolutionDir)\external\Assimp\include;$(SolutionDir)\external\gli-master;$(SolutionDir)\external\nuklear;$(SolutionDir)\external\threadpool;$(SolutionDir)\external\irrKlang\include;$(IncludePath);$(SolutionDir)\include\</IncludePath>
+    <LibraryPath>$(SolutionDir)\external\glfw\glfw-3.2.1.bin.WIN64\lib-vc2015;$(Vulkan_SDK)\Lib;$(SolutionDir)\external\Assimp\lib\x64\Debug;$(LibraryPath);$(SolutionDir)\external\irrKlang\lib;$(SolutionDir)\lib</LibraryPath>
+    <OutDir>$(SolutionDir)\bin\</OutDir>
     <IntDir>$(SolutionDir)\bin\$(Platform)\$(Configuration)\</IntDir>
     <ExecutablePath>$(ExecutablePath)</ExecutablePath>
   </PropertyGroup>
@@ -98,7 +98,7 @@
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(Vulkan_SDK)\Include;$(SolutionDir)\external\glm;$(SolutionDir)\external\stb;$(SolutionDir)\external\glfw\glfw-3.2.1.bin.WIN64\include;$(SolutionDir)\external\Assimp\include;$(SolutionDir)\external\gli-master;$(SolutionDir)\external\nuklear;$(SolutionDir)\external\threadpool;$(SolutionDir)\external\irrKlang\include;$(IncludePath);$(SolutionDir)\include</IncludePath>
     <LibraryPath>$(SolutionDir)\external\glfw\glfw-3.2.1.bin.WIN64\lib-vc2015;$(Vulkan_SDK)\Lib;$(SolutionDir)\external\Assimp\lib\x64\Release;$(LibraryPath);$(SolutionDir)\external\irrKlang\lib;$(SolutionDir)\lib</LibraryPath>
-    <OutDir>$(SolutionDir)\bin</OutDir>
+    <OutDir>$(SolutionDir)\bin\</OutDir>
     <IntDir>$(SolutionDir)\bin\$(Platform)\$(Configuration)\</IntDir>
     <ExecutablePath>$(ExecutablePath)</ExecutablePath>
   </PropertyGroup>
@@ -129,7 +129,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>irrKlang.lib;glfw3.lib;assimp-vc140-mt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>irrKlang.lib;glfw3.lib;assimp-vc140-mt.lib;avcodec.lib;avdevice.lib;avfilter.lib;avformat.lib;avutil.lib;postproc.lib;swresample.lib;swscale.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
