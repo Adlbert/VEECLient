@@ -18,6 +18,7 @@
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/dict.h>
+#include <libswscale/swscale.h>
 #include "libavcodec/avcodec.h"
 #include "libavutil/frame.h"
 #include "libavutil/imgutils.h"
@@ -322,15 +323,21 @@ namespace ve {
 	class EventListenerEncodeFrame : public VEEventListenerGLFW {
 
 	private:
-
-		const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_MPEG4);
-		AVCodecContext* c = avcodec_alloc_context3(codec);
+		double time = 0.0;
+		int frameCount = 0;
+		int pictureWidth = 352;
+		int pictureHeight = 288;
 		const char* filename = "D:\\Projects\\ViennaVulkanEngine\\delta.mp4";
+		AVCodec* codec;
+		AVCodecContext* c = NULL;
+		int i, ret, x, y, got_output;
 		FILE* f;
+		AVFrame* frame;
+		AVPacket pkt;
+		SwsContext* ctx;
 
-		static void encode(AVCodecContext* enc_ctx, AVFrame* frame, AVPacket* pkt, FILE* outfile) {
+		static int encode(AVCodecContext* enc_ctx, AVFrame* frame, AVPacket* pkt, FILE* outfile) {
 			int ret;
-
 			// send the frame to the encoder */
 			ret = avcodec_send_frame(enc_ctx, frame);
 			if (ret < 0) {
@@ -341,7 +348,7 @@ namespace ve {
 			while (ret >= 0) {
 				int ret = avcodec_receive_packet(enc_ctx, pkt);
 				if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-					return;
+					return -1;
 				else if (ret < 0) {
 					fprintf(stderr, "error during encoding\n");
 					exit(1);
@@ -351,7 +358,147 @@ namespace ve {
 				fwrite(pkt->data, 1, pkt->size, outfile);
 				av_packet_unref(pkt);
 			}
+			return ret;
 		}
+
+		//void convert1(AVFrame* frame, uint8_t* dataImage) {
+		//	int ret = av_frame_get_buffer(frame, 32);
+		//	if (ret < 0) {
+		//		fprintf(stderr, "could not alloc the frame data\n");
+		//		exit(1);
+		//	}
+
+		//	fflush(stdout);
+
+		//	// make sure the frame data is writable
+		//	ret = av_frame_make_writable(frame);
+		//	if (ret < 0) {
+		//		fprintf(stderr, "Cannot make frame writeable\n");
+		//		exit(1);
+		//	}
+
+		//	// prepare a dummy image
+		//	// Y
+		//	for (int y = 0; y < c->height; y++) {
+		//		for (int x = 0; x < c->width; x++) {
+		//			frame->data[0][y * frame->linesize[0] + x] = dataImage[y * frame->linesize[0] + x];
+		//		}
+		//	}
+
+		//	// Cb and Cr
+		//	for (int y = 0; y < c->height / 2; y++) {
+		//		for (int x = 0; x < c->width / 2; x++) {
+		//			frame->data[1][y * frame->linesize[1] + x] = dataImage[y * frame->linesize[0] + x];
+		//			frame->data[2][y * frame->linesize[2] + x] = dataImage[y * frame->linesize[0] + x];
+		//		}
+		//	}
+
+		//	frame->pts = frameCount;
+
+		//	// encode the image
+		//	encode(c, frame, pkt, f);
+		//}
+
+		//
+		//int ret, got_output;
+		//uint8_t endcode[] = { 0, 0, 1, 0xb7 };
+		//const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_MPEG4);
+		//AVCodecContext* c = avcodec_alloc_context3(codec);
+		//AVPacket* pkt;
+		//FILE* f;
+
+		//c->bit_rate = 400000;
+
+		//// resolution must be a multiple of two
+		//c->width = pictureWidth;
+		//c->height = pictureHeight;
+		//// frames per second
+		//c->time_base.num = 1;
+		//c->time_base.den = 25;
+		//c->framerate.num = 25;
+		//c->framerate.den = 1;
+
+		//c->gop_size = 10; // emit one intra frame every ten frames
+		//c->max_b_frames = 1;
+		//c->pix_fmt = AV_PIX_FMT_YUV420P;
+
+		//f = fopen(filename, "wb");
+		//if (!f) {
+		//	fprintf(stderr, "could not open %s\n", filename);
+		//	exit(1);
+		//}
+
+		//// open it
+		//if (avcodec_open2(c, codec, NULL) < 0) {
+		//	fprintf(stderr, "could not open codec\n");
+		//	exit(1);
+		//}
+
+
+		//pkt = av_packet_alloc();
+		//if (!pkt) {
+		//	fprintf(stderr, "Cannot alloc packet\n");
+		//	exit(1);
+		//}
+
+
+		//frameCount++;
+		//AVFrame* frame = av_frame_alloc();
+		//frame->format = c->pix_fmt;
+		//frame->width = c->width;
+		//frame->height = c->height;
+		//ret = av_image_alloc(
+		//	frame->data, frame->linesize,
+		//	c->width, c->height, c->pix_fmt, 32);
+		//if (ret < 0) {
+		//	fprintf(stderr, "Could not allocate raw picture buffer\n");
+		//	exit(6);
+		//}
+
+		//fflush(stdout);
+		//SwsContext* ctx = sws_getContext(c->width, c->height,
+		//	AV_PIX_FMT_RGB24, c->width, c->height,
+		//	c->pix_fmt, 0, 0, 0, 0);
+		//uint8_t* inData[1] = { dataImage };
+		//int inLinesize[1] = { 4 * c->width };
+		//sws_scale(ctx, inData, inLinesize, 0, c->height, frame->data, frame->linesize);
+		//frame->pts = frameCount;
+		//ret = avcodec_encode_video2(c, pkt, frame, &got_output);
+		//if (ret < 0) {
+		//	fprintf(stderr, "Error encoding frame\n");
+		//	exit(7);
+		//}
+
+
+		//if (g_gameLost || g_gameWon) {
+		//	// flush the encoder
+		//	ret = avcodec_encode_video2(c, pkt, NULL, &got_output);
+		//	if (ret < 0) {
+		//		fprintf(stderr, "Error encoding frame\n");
+		//		exit(8);
+		//	}
+		//	if (got_output) {
+		//		printf("Write frame %3d (size=%5d)\n", frameCount, pkt->size);
+		//		fwrite(pkt->data, 1, pkt->size, f);
+		//		av_free_packet(pkt);
+		//	}
+
+		//	// add sequence end code to have a real MPEG file
+		//	fwrite(endcode, 1, sizeof(endcode), f);
+		//	fclose(f);
+
+		//	avcodec_free_context(&c);
+		//	av_frame_free(&frame);
+		//	av_freep(&frame->data[0]);
+		//	//av_packet_free(&pkt);
+		//	exit(0);
+		//};
+
+
+		int convertRGBtoYUV(AVFrame* frame, uint8_t* dataImage) {
+
+		}
+
 	protected:
 		virtual void onFrameEnded(veEvent event) {
 			//Method from VEEventListenerGLFW
@@ -368,112 +515,175 @@ namespace ve {
 				image, VK_FORMAT_R8G8B8A8_UNORM,
 				VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 				dataImage, extent.width, extent.height, imageSize);
-
-			m_numScreenshot++;
-
-			//std::string name("media/screenshots/screenshot" + std::to_string(m_numScreenshot - 1) + ".jpg");
-			//stbi_write_jpg(name.c_str(), extent.width, extent.height, 4, dataImage, 4 * extent.width);
 			//
-			uint8_t endcode[] = { 0, 0, 1, 0xb7 };
+			frameCount++;
 
-			AVFrame* picture = av_frame_alloc();
+			/* encode 1 second of video */
+			//for (i = 0; i < 25; i++) {
+			av_init_packet(&pkt);
+			pkt.data = NULL;    // packet data will be allocated by the encoder
+			pkt.size = 0;
 
-			AVPacket* pkt = av_packet_alloc();
-			if (!pkt) {
-				fprintf(stderr, "Cannot alloc packet\n");
-				exit(1);
-			}
 
-			picture->format = c->pix_fmt;
-			picture->width = c->width;
-			picture->height = c->height;
+			fflush(stdout);
+			/* prepare a dummy image */
+			/* Y */
+			//        for (y = 0; y < c->height; y++) {
+			//            for (x = 0; x < c->width; x++) {
+			//                frame->data[0][y * frame->linesize[0] + x] = x + y + i * 3;
+			//            }
+			//        }
+			//
+			//        /* Cb and Cr */
+			//        for (y = 0; y < c->height/2; y++) {
+			//            for (x = 0; x < c->width/2; x++) {
+			//                frame->data[1][y * frame->linesize[1] + x] = 128 + y + i * 2;
+			//                frame->data[2][y * frame->linesize[2] + x] = 64 + x + i * 5;
+			//            }
+			//        }
 
-			int ret = av_frame_get_buffer(picture, 32);
+			//uint8_t* pos = dataImage;
+			//for (y = 0; y < c->height; y++)
+			//{
+			//	for (x = 0; x < c->width; x++)
+			//	{
+			//		pos[0] = i / (float)25 * 255;
+			//		pos[1] = 0;
+			//		pos[2] = x / (float)(c->width) * 255;
+			//		pos[3] = 255;
+			//		pos += 4;
+			//	}
+			//}
+
+			uint8_t* inData[1] = { dataImage }; // RGBA32 have one plane
+			//
+			// NOTE: In a more general setting, the rows of your input image may
+			//       be padded; that is, the bytes per row may not be 4 * width.
+			//       In such cases, inLineSize should be set to that padded width.
+			//
+			int inLinesize[1] = { 4 * c->width }; // RGBA stride
+			sws_scale(ctx, inData, inLinesize, 0, c->height, frame->data, frame->linesize);
+
+			frame->pts = frameCount;
+
+			/* encode the image */
+			ret = avcodec_encode_video2(c, &pkt, frame, &got_output);
 			if (ret < 0) {
-				fprintf(stderr, "could not alloc the frame data\n");
-				exit(1);
+				fprintf(stderr, "Error encoding frame\n");
+				exit(7);
 			}
 
-			// encode 1 frame of video
-			for (int i = 0; i < 1; i++) {
-				fflush(stdout);
-
-				// make sure the frame data is writable
-				ret = av_frame_make_writable(picture);
-				if (ret < 0) {
-					fprintf(stderr, "Cannot make frame writeable\n");
-					exit(1);
-				}
-
-				// prepare image
-				// Y
-				for (int y = 0; y < c->height; y++) {
-					for (int x = 0; x < c->width; x++) {
-						picture->data[0][y * picture->linesize[0] + x] = dataImage[i * 3];
-					}
-				}
-
-				// Cb and Cr
-				for (int y = 0; y < c->height / 2; y++) {
-					for (int x = 0; x < c->width / 2; x++) {
-						picture->data[1][y * picture->linesize[1] + x] = dataImage[i * 3 + 1];
-						picture->data[2][y * picture->linesize[2] + x] = dataImage[i * 3 + 2];
-					}
-				}
-
-				picture->pts = m_numScreenshot;
-
-				// encode the image
-				encode(c, picture, pkt, f);
+			if (got_output) {
+				printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
+				fwrite(pkt.data, 1, pkt.size, f);
+				av_free_packet(&pkt);
 			}
+			//}
+
 
 			if (g_gameLost || g_gameWon) {
-				// flush the encoder
-				encode(c, NULL, pkt, f);
 
-				// add sequence end code to have a real MPEG file
+				/* get the delayed frames */
+				fflush(stdout);
+
+				ret = avcodec_encode_video2(c, &pkt, NULL, &got_output);
+				if (ret < 0) {
+					fprintf(stderr, "Error encoding frame\n");
+					exit(8);
+				}
+
+				if (got_output) {
+					printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
+					fwrite(pkt.data, 1, pkt.size, f);
+					av_free_packet(&pkt);
+				}
+
+				/* add sequence end code to have a real mpeg file */
+				printf("Encode video file %s\n", filename);
+				uint8_t endcode[] = { 0, 0, 1, 0xb7 };
 				fwrite(endcode, 1, sizeof(endcode), f);
 				fclose(f);
 
-				avcodec_free_context(&c);
-				av_frame_free(&picture);
-				av_packet_free(&pkt);
+				avcodec_close(c);
+				av_free(c);
+				av_freep(&frame->data[0]);
+				av_frame_free(&frame);
 				exit(0);
 			}
-		};
+		}
 
 
 	public:
 		///Constructor of class EventListenerCameraMocement
 		EventListenerEncodeFrame(std::string name) : VEEventListenerGLFW(name) {
-			c->bit_rate = 400000;
+						/* find the mpeg1 video encoder */
+			codec = avcodec_find_encoder(AV_CODEC_ID_MPEG4);
+			if (!codec) {
+				fprintf(stderr, "Codec not found\n");
+				exit(1);
+			}
 
-			// resolution must be a multiple of two
-			//c->width = extent.width;
-			//c->height = extent.height;
+			c = avcodec_alloc_context3(codec);
+			if (!c) {
+				fprintf(stderr, "Could not allocate video codec context\n");
+				exit(2);
+			}
+
+			/* put sample parameters */
+			c->bit_rate = 400000;
+			/* resolution must be a multiple of two */
 			c->width = 352;
 			c->height = 288;
-			// frames per second
-			c->time_base.num = 1;
-			c->time_base.den = 25;
-			c->framerate.num = 25;
-			c->framerate.den = 1;
-
-			c->gop_size = 10; // emit one intra frame every ten frames
+			/* frames per second */
+			c->time_base = { 1,25 };
+			/* emit one intra frame every ten frames
+			 * check frame pict_type before passing frame
+			 * to encoder, if frame->pict_type is AV_PICTURE_TYPE_I
+			 * then gop_size is ignored and the output of encoder
+			 * will always be I frame irrespective to gop_size
+			 */
+			c->gop_size = 10;
 			c->max_b_frames = 1;
 			c->pix_fmt = AV_PIX_FMT_YUV420P;
 
-			f = fopen(filename, "wb");
-			if (!f) {
-				fprintf(stderr, "could not open %s\n", filename);
-				exit(1);
+			/* open it */
+			if (avcodec_open2(c, codec, NULL) < 0) {
+				fprintf(stderr, "Could not open codec\n");
+				exit(3);
 			}
 
-			// open it
-			if (avcodec_open2(c, codec, NULL) < 0) {
-				fprintf(stderr, "could not open codec\n");
-				exit(1);
+			f = fopen(filename, "wb");
+			if (!f) {
+				fprintf(stderr, "Could not open %s\n", filename);
+				exit(4);
 			}
+
+			frame = av_frame_alloc();
+			if (!frame) {
+				fprintf(stderr, "Could not allocate video frame\n");
+				exit(5);
+			}
+			frame->format = c->pix_fmt;
+			frame->width = c->width;
+			frame->height = c->height;
+
+			/* the image can be allocated by any means and av_image_alloc() is
+			 * just the most convenient way if av_malloc() is to be used */
+			ret = av_image_alloc(frame->data, frame->linesize, c->width, c->height,
+				c->pix_fmt, 32);
+			if (ret < 0) {
+				fprintf(stderr, "Could not allocate raw picture buffer\n");
+				exit(6);
+			}
+
+			//
+			// RGB to YUV:
+			//    http://stackoverflow.com/questions/16667687/how-to-convert-rgb-from-yuv420p-for-ffmpeg-encoder
+			//
+
+			ctx = sws_getContext(c->width, c->height,
+				AV_PIX_FMT_RGBA, c->width, c->height,
+				AV_PIX_FMT_YUV420P, 0, 0, 0, 0);
 		};
 
 		///Destructor of class EventListenerCameraMocement
