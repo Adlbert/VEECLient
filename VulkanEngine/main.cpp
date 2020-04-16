@@ -320,34 +320,53 @@ namespace ve {
 	//
 	//Adjust the camera to look at the player
 	//
+	//Questions:
+	// How is it possible to use a different AVCodecContext width and height than image width and height
+	// Is it possible to resize window anytime while recording video. Since video size depends on image size
+	// Is it possible to ajust frame rate in onFrameEnded or has the framerate be determined before encoding starts? To clarify, my idea was to make the framerate of the video dependenden on the framerate of the game. Or is it a better idea to only process a frame only so often as determined in the AVCodecContext?
+	//
 	// Encode:
 	//	  https://github.com/codefromabove/FFmpegRGBAToYUV/blob/master/FFmpegRGBAToYUV/ConvertRGBA.cpp
 	//
 	class EventListenerEncodeFrame : public VEEventListenerGLFW {
 
 	private:
-		double time = 0.0;
+		int time = 0.0;
+		bool encodeframe = true;
+		float* m_AvgFrameTime;
 		int frameCount = 0;
 		int pictureWidth = 352;
 		int pictureHeight = 288;
 		const char* filename = "D:\\Projects\\ViennaVulkanEngine\\delta.mp4";
 		AVCodec* codec;
 		AVCodecContext* c = NULL;
-		int i, ret, x, y, got_output;
+		int i, ret, x, y, got_output, interval;
 		FILE* f;
 		AVFrame* frame;
 		AVPacket pkt;
 		SwsContext* ctx;
+		uint8_t* dataImage;
+		VkExtent2D extent;
+		uint32_t imageSize;
 
 	protected:
 		virtual void onFrameEnded(veEvent event) {
+
+			interval++;
+			//only encode every 4th frame
+			if (interval % 4 != 0) {
+				return;
+			}
+			//Compute fps
+			//float fps = 1 / *m_AvgFrameTime;
+			////only every 4th frame is encoded
+			//c->time_base.den = fps;
+			//std::cout << c->time_base.den << std::endl;
+			//std::cout << std::endl;
+
 			//Method from VEEventListenerGLFW
-			VkExtent2D extent = getWindowPointer()->getExtent();
-			uint32_t imageSize = extent.width * extent.height * 4;
 			VkImage image = getRendererPointer()->getSwapChainImage();
-
-			uint8_t* dataImage = new uint8_t[imageSize];
-
+			dataImage = new uint8_t[imageSize];
 			vh::vhBufCopySwapChainImageToHost(getRendererPointer()->getDevice(),
 				getRendererPointer()->getVmaAllocator(),
 				getRendererPointer()->getGraphicsQueue(),
@@ -358,14 +377,21 @@ namespace ve {
 			//
 			frameCount++;
 
-			/* encode 1 second of video */
+			/* the image can be allocated by any means and av_image_alloc() is
+			* just the most convenient way if av_malloc() is to be used */
+			ret = av_image_alloc(frame->data, frame->linesize, c->width, c->height,
+				c->pix_fmt, 32);
+			if (ret < 0) {
+				fprintf(stderr, "Could not allocate raw picture buffer\n");
+				exit(6);
+			}
+
+			/* encode 1 frame of video */
 			av_init_packet(&pkt);
 			pkt.data = NULL;    // packet data will be allocated by the encoder
 			pkt.size = 0;
 
-
 			fflush(stdout);
-
 			uint8_t* inData[1] = { dataImage }; // RGBA32 have one plane
 			//
 			// NOTE: In a more general setting, the rows of your input image may
@@ -427,7 +453,12 @@ namespace ve {
 
 	public:
 		///Constructor of class EventListenerCameraMocement
-		EventListenerEncodeFrame(std::string name) : VEEventListenerGLFW(name) {
+		EventListenerEncodeFrame(std::string name, float* avgFrameTime) : VEEventListenerGLFW(name) {
+
+			m_AvgFrameTime = avgFrameTime;
+			extent = getWindowPointer()->getExtent();
+			imageSize = extent.width * extent.height * 4;
+
 			/* find the mpeg1 video encoder */
 			codec = avcodec_find_encoder(AV_CODEC_ID_MPEG4);
 			if (!codec) {
@@ -440,22 +471,21 @@ namespace ve {
 				fprintf(stderr, "Could not allocate video codec context\n");
 				exit(2);
 			}
-
 			/* put sample parameters */
-			c->bit_rate = 400000;
+			c->bit_rate = 80000;
 			/* resolution must be a multiple of two */
-			c->width = 352;
-			c->height = 288;
+			c->width = extent.width;
+			c->height = extent.height;
 			/* frames per second */
-			c->time_base = { 1,25 };
+			c->time_base = { 1, 25 };
 			/* emit one intra frame every ten frames
 			 * check frame pict_type before passing frame
 			 * to encoder, if frame->pict_type is AV_PICTURE_TYPE_I
 			 * then gop_size is ignored and the output of encoder
 			 * will always be I frame irrespective to gop_size
 			 */
-			c->gop_size = 10;
-			c->max_b_frames = 1;
+			c->gop_size = 48;
+			c->max_b_frames = 2;
 			c->pix_fmt = AV_PIX_FMT_YUV420P;
 
 			/* open it */
@@ -479,18 +509,9 @@ namespace ve {
 			frame->width = c->width;
 			frame->height = c->height;
 
-			/* the image can be allocated by any means and av_image_alloc() is
-			 * just the most convenient way if av_malloc() is to be used */
-			ret = av_image_alloc(frame->data, frame->linesize, c->width, c->height,
-				c->pix_fmt, 32);
-			if (ret < 0) {
-				fprintf(stderr, "Could not allocate raw picture buffer\n");
-				exit(6);
-			}
-
-			ctx = sws_getContext(c->width, c->height,
+			ctx = sws_getContext(extent.width, extent.height,
 				AV_PIX_FMT_RGBA, c->width, c->height,
-				AV_PIX_FMT_YUV420P, 0, 0, 0, 0);
+				c->pix_fmt, 0, 0, 0, 0);
 		};
 
 		///Destructor of class EventListenerCameraMocement
@@ -500,9 +521,14 @@ namespace ve {
 
 	///user defined manager class, derived from VEEngine
 	class MyVulkanEngine : public VEEngine {
+	private:
+		float* avgFrameTime;
+
 	public:
 
-		MyVulkanEngine(bool debug = false) : VEEngine(debug) {};
+		MyVulkanEngine(bool debug = false) : VEEngine(debug) {
+			avgFrameTime = &m_AvgFrameTime;
+		};
 		~MyVulkanEngine() {};
 
 
@@ -510,7 +536,7 @@ namespace ve {
 
 		virtual void registerEventListeners() {
 			registerEventListener(new EventListenerKeyboardBindings("KeyboardBindings"));
-			registerEventListener(new EventListenerEncodeFrame("EncodeFrame"), { veEvent::VE_EVENT_FRAME_ENDED });
+			registerEventListener(new EventListenerEncodeFrame("EncodeFrame", avgFrameTime), { veEvent::VE_EVENT_FRAME_ENDED });
 			registerEventListener(new EventListenerCameraMovement("CameraMovement"), { veEvent::VE_EVENT_FRAME_STARTED });
 			registerEventListener(new EventListenerCollision("Collision"), { veEvent::VE_EVENT_FRAME_STARTED });
 			registerEventListener(new EventListenerGUI("GUI"), { veEvent::VE_EVENT_DRAW_OVERLAY });
@@ -526,7 +552,6 @@ namespace ve {
 
 			VESceneNode* pScene;
 			VECHECKPOINTER(pScene = getSceneManagerPointer()->createSceneNode("Level 1", getRoot()));
-
 			//scene models
 
 			VESceneNode* sp1;
@@ -568,293 +593,15 @@ namespace ve {
 
 using namespace ve;
 
-#define INBUF_SIZE 4096
-
-static void encode(AVCodecContext* enc_ctx, AVFrame* frame, AVPacket* pkt, FILE* outfile) {
-	int ret;
-
-	// send the frame to the encoder */
-	ret = avcodec_send_frame(enc_ctx, frame);
-	if (ret < 0) {
-		fprintf(stderr, "error sending a frame for encoding\n");
-		exit(1);
-	}
-
-	while (ret >= 0) {
-		int ret = avcodec_receive_packet(enc_ctx, pkt);
-		if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-			return;
-		else if (ret < 0) {
-			fprintf(stderr, "error during encoding\n");
-			exit(1);
-		}
-
-		printf("encoded frame %lld (size=%5d)\n", pkt->pts, pkt->size);
-		fwrite(pkt->data, 1, pkt->size, outfile);
-		av_packet_unref(pkt);
-	}
-}
-
-static void pgm_save(unsigned char* buf, int wrap, int xsize, int ysize, char* filename) {
-	FILE* f = fopen(filename, "w");
-	fprintf(f, "P5\n%d %d\n%d\n", xsize, ysize, 255);
-	for (int i = 0; i < ysize; i++)
-		fwrite(buf + i * wrap, 1, xsize, f);
-	fclose(f);
-}
-
-static void decode(AVCodecContext* dec_ctx, AVFrame* frame, AVPacket* pkt, const char* filename) {
-	char buf[1024];
-
-	int ret = avcodec_send_packet(dec_ctx, pkt);
-	if (ret < 0) {
-		fprintf(stderr, "Error sending a packet for decoding\n");
-		exit(1);
-	}
-
-	while (ret >= 0) {
-		ret = avcodec_receive_frame(dec_ctx, frame);
-		if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-			return;
-		else if (ret < 0) {
-			fprintf(stderr, "Error during decoding\n");
-			exit(1);
-		}
-
-		printf("saving frame %3d\n", dec_ctx->frame_number);
-		fflush(stdout);
-
-		// the picture is allocated by the decoder. no need to
-		//      free it
-		snprintf(buf, sizeof(buf), filename, dec_ctx->frame_number);
-		pgm_save(frame->data[0], frame->linesize[0],
-			frame->width, frame->height, buf);
-	}
-}
-
-static int testEncode(const char* filename, const AVCodec* codec) {
-	uint8_t endcode[] = { 0, 0, 1, 0xb7 };
-
-	avcodec_register_all();
-
-	AVCodecContext* c = avcodec_alloc_context3(codec);
-	AVFrame* picture = av_frame_alloc();
-
-	AVPacket* pkt = av_packet_alloc();
-	if (!pkt) {
-		fprintf(stderr, "Cannot alloc packet\n");
-		exit(1);
-	}
-
-	c->bit_rate = 400000;
-
-	// resolution must be a multiple of two
-	c->width = 352;
-	c->height = 288;
-	// frames per second
-	c->time_base.num = 1;
-	c->time_base.den = 25;
-	c->framerate.num = 25;
-	c->framerate.den = 1;
-
-	c->gop_size = 10; // emit one intra frame every ten frames
-	c->max_b_frames = 1;
-	c->pix_fmt = AV_PIX_FMT_YUV420P;
-
-	// open it
-	if (avcodec_open2(c, codec, NULL) < 0) {
-		fprintf(stderr, "could not open codec\n");
-		exit(1);
-	}
-
-	FILE* f = fopen(filename, "wb");
-	if (!f) {
-		fprintf(stderr, "could not open %s\n", filename);
-		exit(1);
-	}
-
-	picture->format = c->pix_fmt;
-	picture->width = c->width;
-	picture->height = c->height;
-
-	int ret = av_frame_get_buffer(picture, 32);
-	if (ret < 0) {
-		fprintf(stderr, "could not alloc the frame data\n");
-		exit(1);
-	}
-
-	// encode 1 second of video
-	for (int i = 0; i < 25; i++) {
-		fflush(stdout);
-
-		// make sure the frame data is writable
-		ret = av_frame_make_writable(picture);
-		if (ret < 0) {
-			fprintf(stderr, "Cannot make frame writeable\n");
-			exit(1);
-		}
-
-		// prepare a dummy image
-		// Y
-		for (int y = 0; y < c->height; y++) {
-			for (int x = 0; x < c->width; x++) {
-				picture->data[0][y * picture->linesize[0] + x] = x + y + i * 3;
-			}
-		}
-
-		// Cb and Cr
-		for (int y = 0; y < c->height / 2; y++) {
-			for (int x = 0; x < c->width / 2; x++) {
-				picture->data[1][y * picture->linesize[1] + x] = 128 + y + i * 2;
-				picture->data[2][y * picture->linesize[2] + x] = 64 + x + i * 5;
-			}
-		}
-
-		picture->pts = i;
-
-		// encode the image
-		encode(c, picture, pkt, f);
-	}
-
-	// flush the encoder
-	encode(c, NULL, pkt, f);
-
-	// add sequence end code to have a real MPEG file
-	fwrite(endcode, 1, sizeof(endcode), f);
-	fclose(f);
-
-	avcodec_free_context(&c);
-	av_frame_free(&picture);
-	av_packet_free(&pkt);
-	return 0;
-}
-
-static int testDecode(const char* filename, const char* outfilename, const AVCodec* codec) {
-	char outname[200];
-	uint8_t inbuf[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE];
-	uint8_t* data;
-
-	AVPacket* pkt = av_packet_alloc();
-	if (!pkt)
-		exit(1);
-
-	// set end of buffer to 0 (this ensures that no overreading happens for damaged MPEG streams)
-	memset(inbuf + INBUF_SIZE, 0, AV_INPUT_BUFFER_PADDING_SIZE);
-
-	if (!codec) {
-		fprintf(stderr, "codec not found\n");
-		exit(1);
-	}
-
-	AVCodecParserContext* parser = av_parser_init(codec->id);
-	if (!parser) {
-		fprintf(stderr, "parser not found\n");
-		exit(1);
-	}
-
-	AVCodecContext* c = avcodec_alloc_context3(codec);
-	AVFrame* picture = av_frame_alloc();
-
-	// For some codecs, such as msmpeg4 and mpeg4, width and height
-	//    MUST be initialized there because this information is not
-	//    available in the bitstream.
-
-	 // open it
-	if (avcodec_open2(c, codec, NULL) < 0) {
-		fprintf(stderr, "could not open codec\n");
-		exit(1);
-	}
-
-	FILE* f = fopen(filename, "rb");
-	if (!f) {
-		fprintf(stderr, "could not open %s\n", filename);
-		exit(1);
-	}
-
-	int num_frame = 0;
-	while (!feof(f)) {
-		// read raw data from the input file
-		size_t data_size = fread(inbuf, 1, INBUF_SIZE, f);
-		if (!data_size)
-			break;
-
-		// use the parser to split the data into frames
-		uint8_t* data = inbuf;
-		while (data_size > 0) {
-			int ret = av_parser_parse2(parser, c, &pkt->data, &pkt->size,
-				data, data_size, AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
-			if (ret < 0) {
-				fprintf(stderr, "Error while parsing\n");
-				exit(1);
-			}
-			data += ret;
-			data_size -= ret;
-
-			if (pkt->size) {
-				sprintf(outname, "%s%d.pgm", outfilename, num_frame++);
-				printf("Outname %s\n", outname);
-				decode(c, picture, pkt, outname);
-			}
-		}
-	}
-
-	// flush the decoder
-	sprintf(outname, "%s%d.pgm", outfilename, num_frame++);
-	printf("Outname %s\n", outname);
-	decode(c, picture, NULL, outname);
-
-	fclose(f);
-
-	av_parser_close(parser);
-	avcodec_free_context(&c);
-	av_frame_free(&picture);
-	av_packet_free(&pkt);
-
-	return 0;
-}
-
-int static metadata(const char* filename) {
-	AVFormatContext* fmt_ctx = NULL;
-	AVDictionaryEntry* tag = NULL;
-	int ret;
-
-	if ((ret = avformat_open_input(&fmt_ctx, filename, NULL, NULL)))
-		return ret;
-
-	if ((ret = avformat_find_stream_info(fmt_ctx, NULL)) < 0) {
-		av_log(NULL, AV_LOG_ERROR, "Cannot find stream information\n");
-		return ret;
-	}
-
-	while ((tag = av_dict_get(fmt_ctx->metadata, "", tag, AV_DICT_IGNORE_SUFFIX)))
-		printf("%s=%s\n", tag->key, tag->value);
-
-	avformat_close_input(&fmt_ctx);
-
-	return 0;
-}
-
 int main() {
 
 	bool debug = true;
 
 	MyVulkanEngine mve(debug);	//enable or disable debugging (=callback, validation layers)
 
-
 	mve.initEngine();
 	mve.loadLevel(1);
 	mve.run();
-
-	//const char* filename = "D:\\Projects\\ViennaVulkanEngine\\delta.mpg";
-	////const char* outfilename = "D:\\Projects\\ViennaVulkanEngine\\out\\out";
-
-	//const AVCodec* encode_codec = avcodec_find_encoder(AV_CODEC_ID_MPEG1VIDEO);
-	//const AVCodec* decode_codec = avcodec_find_encoder(AV_CODEC_ID_MPEG1VIDEO);
-
-	////metadata(filename);
-	//testEncode(filename, encode_codec);
-	////testDecode(filename, outfilename, decode_codec);
-
 	return 0;
 }
 
