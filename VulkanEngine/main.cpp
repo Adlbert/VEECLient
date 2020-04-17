@@ -354,15 +354,15 @@ namespace ve {
 
 			interval++;
 			//only encode every 4th frame
-			if (interval % 4 != 0) {
+			if (interval % 2 != 0) {
 				return;
 			}
-			//Compute fps
+			////Compute fps
 			//float fps = 1 / *m_AvgFrameTime;
-			////only every 4th frame is encoded
+			//only every 4th frame is encoded
 			//c->time_base.den = fps;
-			//std::cout << c->time_base.den << std::endl;
-			//std::cout << std::endl;
+			////std::cout << c->time_base.den << std::endl;
+			////std::cout << std::endl;
 
 			//Method from VEEventListenerGLFW
 			VkImage image = getRendererPointer()->getSwapChainImage();
@@ -411,7 +411,7 @@ namespace ve {
 			}
 
 			if (got_output) {
-				printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
+				//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
 				fwrite(pkt.data, 1, pkt.size, f);
 				av_free_packet(&pkt);
 			}
@@ -430,7 +430,7 @@ namespace ve {
 					}
 
 					if (got_output) {
-						printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
+						//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
 						fwrite(pkt.data, 1, pkt.size, f);
 						av_free_packet(&pkt);
 					}
@@ -455,6 +455,10 @@ namespace ve {
 		///Constructor of class EventListenerCameraMocement
 		EventListenerEncodeFrame(std::string name, float* avgFrameTime) : VEEventListenerGLFW(name) {
 
+			dataImage = new uint8_t[0];
+			got_output = i = interval = ret = x = y = 0;
+
+
 			m_AvgFrameTime = avgFrameTime;
 			extent = getWindowPointer()->getExtent();
 			imageSize = extent.width * extent.height * 4;
@@ -471,11 +475,14 @@ namespace ve {
 				fprintf(stderr, "Could not allocate video codec context\n");
 				exit(2);
 			}
+
 			/* put sample parameters */
-			c->bit_rate = 80000;
-			/* resolution must be a multiple of two */
+			//resolution must be a multiple of two 
 			c->width = extent.width;
 			c->height = extent.height;
+			//
+			//Set pixel format
+			c->pix_fmt = AVPixelFormat::AV_PIX_FMT_YUV420P;
 			/* frames per second */
 			c->time_base = { 1, 25 };
 			/* emit one intra frame every ten frames
@@ -484,9 +491,43 @@ namespace ve {
 			 * then gop_size is ignored and the output of encoder
 			 * will always be I frame irrespective to gop_size
 			 */
-			c->gop_size = 48;
+			c->gop_size = 12;
 			c->max_b_frames = 2;
-			c->pix_fmt = AV_PIX_FMT_YUV420P;
+			//deprecated use encoder private options instead	
+			//c->b_frame_strategy = 1;
+			//c->coder_type = 1;
+			//c->scenechange_threshold = 40;
+
+			//motion estimation comparison function
+			c->me_cmp = 1;
+			//maximum motion estimation search range in subpel units If 0 then no limit.
+			c->me_range = 5;
+			//subpel ME quality
+			c->me_subpel_quality = 10;
+
+			//minimum quantizer
+			c->qmin = 10;
+			//maximum quantizer
+			c->qmax = 51;
+			//maximum quantizer difference between frames
+			c->max_qdiff = 4;
+			//amount of qscale change between easy & hard scenes (0.0-1.0)
+			c->qcompress = 0.8;
+
+
+			//the average bitrate
+			c->bit_rate = 8 * 1024 * 128;
+			//number of bits the bitstream is allowed to diverge from the reference.
+			c->bit_rate_tolerance = 8 * 1024 * 32;
+			//maximum bitrate
+			c->rc_max_rate = 8 * 1024 * 256;
+			//decoder bitstream buffer size
+			c->rc_buffer_size = 8 * 1024 * 32;
+
+			//qscale factor between P- and I-frames If > 0 then the last P-frame quantizer will be used (q = lastp_q * factor + offset).
+			c->i_quant_factor = 0.71;
+			c->flags |= AV_CODEC_FLAG_LOOP_FILTER;
+			c->flags2 |= AV_CODEC_FLAG2_FAST;
 
 			/* open it */
 			if (avcodec_open2(c, codec, NULL) < 0) {
@@ -509,9 +550,10 @@ namespace ve {
 			frame->width = c->width;
 			frame->height = c->height;
 
+			//Use Bicubic interpolation
 			ctx = sws_getContext(extent.width, extent.height,
 				AV_PIX_FMT_RGBA, c->width, c->height,
-				c->pix_fmt, 0, 0, 0, 0);
+				c->pix_fmt, SWS_BICUBIC, 0, 0, 0);
 		};
 
 		///Destructor of class EventListenerCameraMocement
