@@ -176,6 +176,7 @@
     <ClInclude Include="..\external\threadpool\ThreadPool.h" />
     <ClInclude Include="CLInclude.h" />
     <ClInclude Include="CLShape.h" />
+    <ClInclude Include="main.h" />
     <ClInclude Include="VEEventListenerNuklear.h" />
     <ClInclude Include="VEEventListenerNuklearDebug.h" />
     <ClInclude Include="VEMaterial.h" />

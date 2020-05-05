@@ -4,7 +4,7 @@
 * (c) bei Helmut Hlavacs, University of Vienna
 *
 */
-
+#define _WINSOCKAPI_ 
 
 #include "VEInclude.h"
 #include "glm/ext.hpp"
@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <iostream>
+#include <WS2tcpip.h>
+#include <thread> 
 
 
 
@@ -27,6 +29,7 @@ extern "C" {
 }
 
 
+#pragma comment(lib, "Ws2_32.lib")
 
 namespace ve {
 
@@ -318,26 +321,16 @@ namespace ve {
 	};
 
 	//
-	//Adjust the camera to look at the player
-	//
-	//Questions:
-	// How is it possible to use a different AVCodecContext width and height than image width and height
-	// Is it possible to resize window anytime while recording video. Since video size depends on image size
-	// Is it possible to ajust frame rate in onFrameEnded or has the framerate be determined before encoding starts? To clarify, my idea was to make the framerate of the video dependenden on the framerate of the game. Or is it a better idea to only process a frame only so often as determined in the AVCodecContext?
-	//
 	// Encode:
 	//	  https://github.com/codefromabove/FFmpegRGBAToYUV/blob/master/FFmpegRGBAToYUV/ConvertRGBA.cpp
 	//
 	class EventListenerEncodeFrame : public VEEventListenerGLFW {
 
 	private:
-		int time = 0.0;
 		bool encodeframe = true;
 		float* m_AvgFrameTime;
 		int frameCount = 0;
-		int pictureWidth = 352;
-		int pictureHeight = 288;
-		const char* filename = "D:\\Projects\\ViennaVulkanEngine\\delta.mp4";
+		const char* filename = "D:\\Projects\\ViennaVulkanEngine\\MPG1Video_highbitrate.mpg";
 		AVCodec* codec;
 		AVCodecContext* c = NULL;
 		int i, ret, x, y, got_output, interval;
@@ -348,6 +341,102 @@ namespace ve {
 		uint8_t* dataImage;
 		VkExtent2D extent;
 		uint32_t imageSize;
+
+		// A callable object 
+		class frame_thread {
+		private:
+			int fragNum;
+			int maxBuffersize = 1400;
+			uint8_t* sendBuffer;
+
+			char* getBuffer(uint8_t* dataImage, int frameCount) {
+				char buff[sizeof(dataImage)];
+				for (int i = 0; i < sizeof(dataImage); i++) {
+					buff[i] = dataImage[i];
+				}
+				return buff;
+			}
+
+			void sendFragment(char* buff) {
+				//https://bitbucket.org/sloankelly/youtube-source-repository/src/bb84cf7f8d95d37354cf7dd0f0a57e48f393bd4b/cpp/networking/UDPClientServerBasic/?at=master
+				////////////////////////////////////////////////////////////
+				// INITIALIZE WINSOCK
+				////////////////////////////////////////////////////////////
+
+				// Structure to store the WinSock version. This is filled in
+				// on the call to WSAStartup()
+				WSADATA data;
+
+				// To start WinSock, the required version must be passed to
+				// WSAStartup(). This server is going to use WinSock version
+				// 2 so I create a word that will store 2 and 2 in hex i.e.
+				// 0x0202
+				WORD version = MAKEWORD(2, 2);
+
+				// Start WinSock
+				int wsOk = WSAStartup(version, &data);
+				if (wsOk != 0)
+				{
+					// Not ok! Get out quickly
+					std::cout << "Can't start Winsock! " << wsOk;
+					return;
+				}
+
+				////////////////////////////////////////////////////////////
+				// CONNECT TO THE SERVER
+				////////////////////////////////////////////////////////////
+
+				// Create a hint structure for the server
+				sockaddr_in server;
+				server.sin_family = AF_INET; // AF_INET = IPv4 addresses
+				server.sin_port = htons(54000); // Little to big endian conversion
+				inet_pton(AF_INET, "127.0.0.1", &server.sin_addr); // Convert from string to byte array
+
+				// Socket creation, note that the socket type is datagram
+				SOCKET out = socket(AF_INET, SOCK_DGRAM, 0);
+
+				// Write out to that socket
+				std::string s("Test");
+				//int sendOk = sendto(out, buff, strlen(buff), 0, (sockaddr*)&server, sizeof(server));
+				int sendOk = sendto(out, s.c_str(), s.size() + 1, 0, (sockaddr*)&server, sizeof(server));
+
+
+				if (sendOk == SOCKET_ERROR)
+				{
+					std::cout << "That didn't work! " << WSAGetLastError() << std::endl;
+				}
+
+				// Close the socket
+				closesocket(out);
+
+				// Close down Winsock
+				WSACleanup();
+			}
+
+
+			void sendFrame(uint8_t* pkg, int pkgsize, int frameCount) {
+				char* buf = reinterpret_cast<char*>(pkg);
+				int currentBuffersize = 0;
+				for (int i = 0; i < pkgsize; i++) {
+					if (currentBuffersize < maxBuffersize) {
+						sendBuffer[currentBuffersize] = pkg[i];
+						currentBuffersize++;
+					}
+					else {
+						sendFragment(reinterpret_cast<char*>(sendBuffer));
+						currentBuffersize = 0;
+					}
+				}
+			}
+
+		public:
+			void operator()(uint8_t* pkg, int pkgsize, int frameCount) {
+				sendBuffer = new uint8_t[maxBuffersize];
+				this->maxBuffersize = maxBuffersize;
+				fragNum = 0;
+				sendFrame(pkg, pkgsize, frameCount);
+			}
+		};
 
 	protected:
 		virtual void onFrameEnded(veEvent event) {
@@ -412,12 +501,17 @@ namespace ve {
 
 			if (got_output) {
 				//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
+				//if (addToSendBuffer(pkt.data, pkt.size)) {
+				//}
+				std::thread th2(frame_thread(), pkt.data, pkt.size, frameCount);
+				th2.detach();
 				fwrite(pkt.data, 1, pkt.size, f);
 				av_free_packet(&pkt);
 			}
 
 
-			if (g_gameLost || g_gameWon) {
+
+			if (false && (g_gameLost || g_gameWon)) {
 
 				/* get the delayed frames */
 				for (got_output = 1; got_output; frameCount++) {
@@ -457,7 +551,7 @@ namespace ve {
 
 			dataImage = new uint8_t[0];
 			got_output = i = interval = ret = x = y = 0;
-
+			pkt = AVPacket();
 
 			m_AvgFrameTime = avgFrameTime;
 			extent = getWindowPointer()->getExtent();
@@ -491,41 +585,61 @@ namespace ve {
 			 * then gop_size is ignored and the output of encoder
 			 * will always be I frame irrespective to gop_size
 			 */
-			c->gop_size = 12;
+			c->gop_size = 8;
 			c->max_b_frames = 2;
-			//deprecated use encoder private options instead	
-			//c->b_frame_strategy = 1;
-			//c->coder_type = 1;
-			//c->scenechange_threshold = 40;
 
 			//motion estimation comparison function
 			c->me_cmp = 1;
 			//maximum motion estimation search range in subpel units If 0 then no limit.
-			c->me_range = 5;
+			c->me_range = 0;
 			//subpel ME quality
-			c->me_subpel_quality = 10;
+			c->me_subpel_quality = 5;
 
 			//minimum quantizer
 			c->qmin = 10;
 			//maximum quantizer
 			c->qmax = 51;
 			//maximum quantizer difference between frames
-			c->max_qdiff = 4;
+			c->max_qdiff = 2;
 			//amount of qscale change between easy & hard scenes (0.0-1.0)
 			c->qcompress = 0.8;
-
-
-			//the average bitrate
-			c->bit_rate = 8 * 1024 * 128;
-			//number of bits the bitstream is allowed to diverge from the reference.
-			c->bit_rate_tolerance = 8 * 1024 * 32;
-			//maximum bitrate
-			c->rc_max_rate = 8 * 1024 * 256;
-			//decoder bitstream buffer size
-			c->rc_buffer_size = 8 * 1024 * 32;
-
 			//qscale factor between P- and I-frames If > 0 then the last P-frame quantizer will be used (q = lastp_q * factor + offset).
 			c->i_quant_factor = 0.71;
+
+			//LowBitrate
+			if (false) {
+				//the average bitrate
+				c->bit_rate = 1024 * 256; // 256kb
+				//number of bits the bitstream is allowed to diverge from the reference.
+				c->bit_rate_tolerance = 1024 * 64; //64kb
+				//maximum bitrate
+				c->rc_max_rate = 1024 * 512;//512kb
+				//decoder bitstream buffer size
+				c->rc_buffer_size = 1024 * 1000;//1Mb
+			}
+			//MidBitrate
+			if (false) {
+				//the average bitrate
+				c->bit_rate = 1024 * 1000 * 2;//2Mb
+				//number of bits the bitstream is allowed to diverge from the reference.
+				c->bit_rate_tolerance = 1024 * 1000 * 1;//1Mb
+				//maximum bitrate
+				c->rc_max_rate = 1024 * 1000 * 3;//3Mb
+				//decoder bitstream buffer size
+				c->rc_buffer_size = 1024 * 1000 * 8;//8Mb
+			}
+			//HighBitrate
+			if (true) {
+				//the average bitrate
+				c->bit_rate = 1024 * 1000 * 20;//20Mb
+				//number of bits the bitstream is allowed to diverge from the reference.
+				c->bit_rate_tolerance = 1024 * 1000 * 4;//4Mb
+				//maximum bitrate
+				c->rc_max_rate = 1024 * 1000 * 24;//24Mb
+				//decoder bitstream buffer size
+				c->rc_buffer_size = 1024 * 1000 * 40;//40Mb
+			}
+
 			c->flags |= AV_CODEC_FLAG_LOOP_FILTER;
 			c->flags2 |= AV_CODEC_FLAG2_FAST;
 
