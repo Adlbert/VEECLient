@@ -116,7 +116,7 @@ namespace ve {
 				g_gameLost = false;
 				g_gameWon = false;
 				g_restart = false;
-				g_time = 30;
+				g_time = 5;
 				g_score = 0;
 				PlaceCubes(getSceneManagerPointer()->getSceneNode("Level 1"), g_difficulty);
 				getSceneManagerPointer()->getSceneNode("The Player Parent")->setPosition(glm::vec3(0.0f, 1.0f, 5.0f));
@@ -327,13 +327,12 @@ namespace ve {
 	class EventListenerEncodeFrame : public VEEventListenerGLFW {
 
 	private:
-		bool encodeframe = true;
+		bool recordframe, encodeframe = true;
 		float* m_AvgFrameTime;
-		int frameCount = 0;
 		const char* filename = "D:\\Projects\\ViennaVulkanEngine\\MPG1Video_highbitrate.mpg";
 		AVCodec* codec;
 		AVCodecContext* c = NULL;
-		int i, ret, x, y, got_output, interval;
+		int i, ret, x, y, got_output, interval, frameCount;
 		FILE* f;
 		AVFrame* frame;
 		AVPacket pkt;
@@ -342,221 +341,7 @@ namespace ve {
 		VkExtent2D extent;
 		uint32_t imageSize;
 
-		// A callable object 
-		class frame_thread {
-		private:
-			int fragNum;
-			int maxBuffersize = 1400;
-			uint8_t* sendBuffer;
-
-			char* getBuffer(uint8_t* dataImage, int frameCount) {
-				char buff[sizeof(dataImage)];
-				for (int i = 0; i < sizeof(dataImage); i++) {
-					buff[i] = dataImage[i];
-				}
-				return buff;
-			}
-
-			void sendFragment(char* buff) {
-				//https://bitbucket.org/sloankelly/youtube-source-repository/src/bb84cf7f8d95d37354cf7dd0f0a57e48f393bd4b/cpp/networking/UDPClientServerBasic/?at=master
-				////////////////////////////////////////////////////////////
-				// INITIALIZE WINSOCK
-				////////////////////////////////////////////////////////////
-
-				// Structure to store the WinSock version. This is filled in
-				// on the call to WSAStartup()
-				WSADATA data;
-
-				// To start WinSock, the required version must be passed to
-				// WSAStartup(). This server is going to use WinSock version
-				// 2 so I create a word that will store 2 and 2 in hex i.e.
-				// 0x0202
-				WORD version = MAKEWORD(2, 2);
-
-				// Start WinSock
-				int wsOk = WSAStartup(version, &data);
-				if (wsOk != 0)
-				{
-					// Not ok! Get out quickly
-					std::cout << "Can't start Winsock! " << wsOk;
-					return;
-				}
-
-				////////////////////////////////////////////////////////////
-				// CONNECT TO THE SERVER
-				////////////////////////////////////////////////////////////
-
-				// Create a hint structure for the server
-				sockaddr_in server;
-				server.sin_family = AF_INET; // AF_INET = IPv4 addresses
-				server.sin_port = htons(54000); // Little to big endian conversion
-				inet_pton(AF_INET, "127.0.0.1", &server.sin_addr); // Convert from string to byte array
-
-				// Socket creation, note that the socket type is datagram
-				SOCKET out = socket(AF_INET, SOCK_DGRAM, 0);
-
-				// Write out to that socket
-				std::string s("Test");
-				//int sendOk = sendto(out, buff, strlen(buff), 0, (sockaddr*)&server, sizeof(server));
-				int sendOk = sendto(out, s.c_str(), s.size() + 1, 0, (sockaddr*)&server, sizeof(server));
-
-
-				if (sendOk == SOCKET_ERROR)
-				{
-					std::cout << "That didn't work! " << WSAGetLastError() << std::endl;
-				}
-
-				// Close the socket
-				closesocket(out);
-
-				// Close down Winsock
-				WSACleanup();
-			}
-
-
-			void sendFrame(uint8_t* pkg, int pkgsize, int frameCount) {
-				char* buf = reinterpret_cast<char*>(pkg);
-				int currentBuffersize = 0;
-				for (int i = 0; i < pkgsize; i++) {
-					if (currentBuffersize < maxBuffersize) {
-						sendBuffer[currentBuffersize] = pkg[i];
-						currentBuffersize++;
-					}
-					else {
-						sendFragment(reinterpret_cast<char*>(sendBuffer));
-						currentBuffersize = 0;
-					}
-				}
-			}
-
-		public:
-			void operator()(uint8_t* pkg, int pkgsize, int frameCount) {
-				sendBuffer = new uint8_t[maxBuffersize];
-				this->maxBuffersize = maxBuffersize;
-				fragNum = 0;
-				sendFrame(pkg, pkgsize, frameCount);
-			}
-		};
-
-	protected:
-		virtual void onFrameEnded(veEvent event) {
-
-			interval++;
-			//only encode every 4th frame
-			if (interval % 2 != 0) {
-				return;
-			}
-			////Compute fps
-			//float fps = 1 / *m_AvgFrameTime;
-			//only every 4th frame is encoded
-			//c->time_base.den = fps;
-			////std::cout << c->time_base.den << std::endl;
-			////std::cout << std::endl;
-
-			//Method from VEEventListenerGLFW
-			VkImage image = getRendererPointer()->getSwapChainImage();
-			dataImage = new uint8_t[imageSize];
-			vh::vhBufCopySwapChainImageToHost(getRendererPointer()->getDevice(),
-				getRendererPointer()->getVmaAllocator(),
-				getRendererPointer()->getGraphicsQueue(),
-				getRendererPointer()->getCommandPool(),
-				image, VK_FORMAT_R8G8B8A8_UNORM,
-				VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-				dataImage, extent.width, extent.height, imageSize);
-			//
-			frameCount++;
-
-			/* the image can be allocated by any means and av_image_alloc() is
-			* just the most convenient way if av_malloc() is to be used */
-			ret = av_image_alloc(frame->data, frame->linesize, c->width, c->height,
-				c->pix_fmt, 32);
-			if (ret < 0) {
-				fprintf(stderr, "Could not allocate raw picture buffer\n");
-				exit(6);
-			}
-
-			/* encode 1 frame of video */
-			av_init_packet(&pkt);
-			pkt.data = NULL;    // packet data will be allocated by the encoder
-			pkt.size = 0;
-
-			fflush(stdout);
-			uint8_t* inData[1] = { dataImage }; // RGBA32 have one plane
-			//
-			// NOTE: In a more general setting, the rows of your input image may
-			//       be padded; that is, the bytes per row may not be 4 * width.
-			//       In such cases, inLineSize should be set to that padded width.
-			//
-			int inLinesize[1] = { 4 * c->width }; // RGBA stride
-			sws_scale(ctx, inData, inLinesize, 0, c->height, frame->data, frame->linesize);
-
-			frame->pts = frameCount;
-
-			/* encode the image */
-			ret = avcodec_encode_video2(c, &pkt, frame, &got_output);
-			if (ret < 0) {
-				fprintf(stderr, "Error encoding frame\n");
-				exit(7);
-			}
-
-			if (got_output) {
-				//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
-				//if (addToSendBuffer(pkt.data, pkt.size)) {
-				//}
-				std::thread th2(frame_thread(), pkt.data, pkt.size, frameCount);
-				th2.detach();
-				fwrite(pkt.data, 1, pkt.size, f);
-				av_free_packet(&pkt);
-			}
-
-
-
-			if (false && (g_gameLost || g_gameWon)) {
-
-				/* get the delayed frames */
-				for (got_output = 1; got_output; frameCount++) {
-					fflush(stdout);
-
-					ret = avcodec_encode_video2(c, &pkt, NULL, &got_output);
-					if (ret < 0) {
-						fprintf(stderr, "Error encoding frame\n");
-						exit(8);
-					}
-
-					if (got_output) {
-						//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
-						fwrite(pkt.data, 1, pkt.size, f);
-						av_free_packet(&pkt);
-					}
-				}
-
-				/* add sequence end code to have a real mpeg file */
-				printf("Encode video file %s\n", filename);
-				uint8_t endcode[] = { 0, 0, 1, 0xb7 };
-				fwrite(endcode, 1, sizeof(endcode), f);
-				fclose(f);
-
-				avcodec_close(c);
-				av_free(c);
-				av_freep(&frame->data[0]);
-				av_frame_free(&frame);
-				exit(0);
-			}
-		}
-
-
-	public:
-		///Constructor of class EventListenerCameraMocement
-		EventListenerEncodeFrame(std::string name, float* avgFrameTime) : VEEventListenerGLFW(name) {
-
-			dataImage = new uint8_t[0];
-			got_output = i = interval = ret = x = y = 0;
-			pkt = AVPacket();
-
-			m_AvgFrameTime = avgFrameTime;
-			extent = getWindowPointer()->getExtent();
-			imageSize = extent.width * extent.height * 4;
-
+		void init() {
 			/* find the mpeg1 video encoder */
 			codec = avcodec_find_encoder(AV_CODEC_ID_MPEG4);
 			if (!codec) {
@@ -668,6 +453,246 @@ namespace ve {
 			ctx = sws_getContext(extent.width, extent.height,
 				AV_PIX_FMT_RGBA, c->width, c->height,
 				c->pix_fmt, SWS_BICUBIC, 0, 0, 0);
+		}
+
+		// A callable object 
+		class frame_thread {
+		private:
+			int headerSize = 2, maxBuffersize = 1400, frameCount, pktsize, fragNum, currentBuffersize = 0;
+			uint8_t* sendBuffer, pkt;
+			char* sendBuffer_c;
+
+			char* getBuffer(uint8_t* dataImage, int frameCount) {
+				char buff[sizeof(dataImage)];
+				for (int i = 0; i < sizeof(dataImage); i++) {
+					buff[i] = dataImage[i];
+				}
+				return buff;
+			}
+
+			void sendFragment(uint8_t* buff) {
+				//https://bitbucket.org/sloankelly/youtube-source-repository/src/bb84cf7f8d95d37354cf7dd0f0a57e48f393bd4b/cpp/networking/UDPClientServerBasic/?at=master
+				////////////////////////////////////////////////////////////
+				// INITIALIZE WINSOCK
+				////////////////////////////////////////////////////////////
+
+				// Structure to store the WinSock version. This is filled in
+				// on the call to WSAStartup()eds
+				WSADATA data;
+
+				// To start WinSock, the required version must be passed to
+				// WSAStartup(). This server is going to use WinSock version
+				// 2 so I create a word that will store 2 and 2 in hex i.e.
+				// 0x0202
+				WORD version = MAKEWORD(2, 2);
+
+				// Start WinSock
+				int wsOk = WSAStartup(version, &data);
+				if (wsOk != 0)
+				{
+					// Not ok! Get out quickly
+					std::cout << "Can't start Winsock! " << wsOk;
+					return;
+				}
+
+				////////////////////////////////////////////////////////////
+				// CONNECT TO THE SERVER
+				////////////////////////////////////////////////////////////
+
+				// Create a hint structure for the server
+				sockaddr_in server;
+				server.sin_family = AF_INET; // AF_INET = IPv4 addresses
+				server.sin_port = htons(54000); // Little to big endian conversion
+				inet_pton(AF_INET, "127.0.0.1", &server.sin_addr); // Convert from string to byte array
+
+				// Socket creation, note that the socket type is datagram
+				SOCKET out = socket(AF_INET, SOCK_DGRAM, 0);
+
+				// Write out to that socket
+				std::string s("Test");
+				int sendOk = sendto(out, (char*)buff, sizeof(int) * 1402, 0, (sockaddr*)&server, sizeof(server));
+				//int sendOk = sendto(out, s.c_str(), s.size() + 1, 0, (sockaddr*)&server, sizeof(server));
+
+
+				if (sendOk == SOCKET_ERROR)
+				{
+					std::cout << "That didn't work! " << WSAGetLastError() << std::endl;
+				}
+
+				// Close the socket
+				closesocket(out);
+
+				// Close down Winsock
+				WSACleanup();
+			}
+
+
+			void sendFrame(uint8_t* pkg) {
+				for (int i = 0; i < pktsize - 1; i++) {
+					if (currentBuffersize < maxBuffersize) {
+						sendBuffer[currentBuffersize] = pkg[i];
+						//sendBuffer[currentBuffersize] = 'a';
+						currentBuffersize++;
+					}
+					else {
+						int headerFrag = 1 + maxBuffersize;
+						sendBuffer[maxBuffersize] = (uint8_t)frameCount;
+						sendBuffer[headerFrag] = (uint8_t)fragNum;
+						char* fragment = reinterpret_cast<char*>(sendBuffer);
+						for (int i = 0; i < maxBuffersize + 2; i++) {
+							//htonl()
+								//std::cout << (int)fragment[i];
+						}
+						std::cout << frameCount << "_";
+						std::cout << fragNum << "_";
+						std::cout << (int)fragment[maxBuffersize] << "_";
+						std::cout << (int)fragment[headerFrag];
+						std::cout << std::endl;
+
+						sendFragment(sendBuffer);
+						currentBuffersize = 0;
+						++fragNum;
+					}
+				}
+			}
+
+		public:
+			void operator()(uint8_t* pkt, int pktsize, int frameCount) {
+				fragNum = 0;
+				this->frameCount = frameCount;
+				this->pktsize = pktsize;
+				int bSize = maxBuffersize + headerSize;
+				sendBuffer = new uint8_t[bSize];
+				sendBuffer_c = new char[bSize];
+				sendFrame(pkt);
+			}
+		};
+
+	protected:
+		virtual void onFrameEnded(veEvent event) {
+			if ((g_gameLost || g_gameWon) && recordframe) {
+
+				/* get the delayed frames */
+				for (got_output = 1; got_output; frameCount++) {
+					fflush(stdout);
+
+					ret = avcodec_encode_video2(c, &pkt, NULL, &got_output);
+					if (ret < 0) {
+						fprintf(stderr, "Error encoding frame\n");
+						exit(8);
+					}
+
+					if (got_output) {
+						//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
+						fwrite(pkt.data, 1, pkt.size, f);
+						av_free_packet(&pkt);
+					}
+				}
+
+				/* add sequence end code to have a real mpeg file */
+				printf("Encode video file %s\n", filename);
+				uint8_t endcode[] = { 0, 0, 1, 0xb7 };
+				fwrite(endcode, 1, sizeof(endcode), f);
+				fclose(f);
+
+				avcodec_close(c);
+				av_free(c);
+				av_freep(&frame->data[0]);
+				av_frame_free(&frame);
+				recordframe = false;
+			}
+
+			interval++;
+			if (g_restart) {
+				init();
+				recordframe = true;
+			}
+			//only encode every 4th frame
+			if (!recordframe)
+				return;
+			if (!(interval % 2 != 0)) {
+				return;
+			}
+			////Compute fps
+			//float fps = 1 / *m_AvgFrameTime;
+			//only every 4th frame is encoded
+			//c->time_base.den = fps;
+			////std::cout << c->time_base.den << std::endl;
+			////std::cout << std::endl;
+
+			//Method from VEEventListenerGLFW
+			VkImage image = getRendererPointer()->getSwapChainImage();
+			dataImage = new uint8_t[imageSize];
+			vh::vhBufCopySwapChainImageToHost(getRendererPointer()->getDevice(),
+				getRendererPointer()->getVmaAllocator(),
+				getRendererPointer()->getGraphicsQueue(),
+				getRendererPointer()->getCommandPool(),
+				image, VK_FORMAT_R8G8B8A8_UNORM,
+				VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				dataImage, extent.width, extent.height, imageSize);
+			//
+			frameCount++;
+
+			/* the image can be allocated by any means and av_image_alloc() is
+			* just the most convenient way if av_malloc() is to be used */
+			ret = av_image_alloc(frame->data, frame->linesize, c->width, c->height,
+				c->pix_fmt, 32);
+			if (ret < 0) {
+				fprintf(stderr, "Could not allocate raw picture buffer\n");
+				exit(6);
+			}
+
+			/* encode 1 frame of video */
+			av_init_packet(&pkt);
+			pkt.data = NULL;    // packet data will be allocated by the encoder
+			pkt.size = 0;
+
+			fflush(stdout);
+			uint8_t* inData[1] = { dataImage }; // RGBA32 have one plane
+			//
+			// NOTE: In a more general setting, the rows of your input image may
+			//       be padded; that is, the bytes per row may not be 4 * width.
+			//       In such cases, inLineSize should be set to that padded width.
+			//
+			int inLinesize[1] = { 4 * c->width }; // RGBA stride
+			sws_scale(ctx, inData, inLinesize, 0, c->height, frame->data, frame->linesize);
+
+			frame->pts = frameCount;
+
+			/* encode the image */
+			ret = avcodec_encode_video2(c, &pkt, frame, &got_output);
+			if (ret < 0) {
+				fprintf(stderr, "Error encoding frame\n");
+				exit(7);
+			}
+
+			if (got_output) {
+				//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
+				//if (addToSendBuffer(pkt.data, pkt.size)) {
+				//}
+				std::thread th2(frame_thread(), pkt.data, pkt.size, frameCount);
+				th2.detach();
+				fwrite(pkt.data, 1, pkt.size, f);
+				av_free_packet(&pkt);
+			}
+		}
+
+
+	public:
+		///Constructor of class EventListenerCameraMocement
+		EventListenerEncodeFrame(std::string name, float* avgFrameTime) : VEEventListenerGLFW(name) {
+
+			frameCount = 0;
+			dataImage = new uint8_t[0];
+			got_output = i = interval = ret = x = y = 0;
+			pkt = AVPacket();
+
+			m_AvgFrameTime = avgFrameTime;
+			extent = getWindowPointer()->getExtent();
+			imageSize = extent.width * extent.height * 4;
+
+			init();
+
 		};
 
 		///Destructor of class EventListenerCameraMocement
