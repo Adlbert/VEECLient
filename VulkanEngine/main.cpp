@@ -458,8 +458,9 @@ namespace ve {
 		// A callable object 
 		class frame_thread {
 		private:
-			int headerSize = 2, maxBuffersize = 1400, frameCount, pktsize, fragNum, currentBuffersize = 0;
-			uint8_t* sendBuffer, pkt;
+			int headerSize = 2, frameCount, pktsize, fragNum, currentBuffersize = 0;
+			int maxBuffersize = 1400;
+			uint32_t* sendBuffer, pkt;
 			char* sendBuffer_c;
 
 			char* getBuffer(uint8_t* dataImage, int frameCount) {
@@ -470,7 +471,7 @@ namespace ve {
 				return buff;
 			}
 
-			void sendFragment(uint8_t* buff) {
+			void sendFragment(uint32_t* buff) {
 				//https://bitbucket.org/sloankelly/youtube-source-repository/src/bb84cf7f8d95d37354cf7dd0f0a57e48f393bd4b/cpp/networking/UDPClientServerBasic/?at=master
 				////////////////////////////////////////////////////////////
 				// INITIALIZE WINSOCK
@@ -509,9 +510,7 @@ namespace ve {
 				SOCKET out = socket(AF_INET, SOCK_DGRAM, 0);
 
 				// Write out to that socket
-				std::string s("Test");
-				int sendOk = sendto(out, (char*)buff, sizeof(int) * 1402, 0, (sockaddr*)&server, sizeof(server));
-				//int sendOk = sendto(out, s.c_str(), s.size() + 1, 0, (sockaddr*)&server, sizeof(server));
+				int sendOk = sendto(out, (char*)buff, sizeof(buff), 0, (sockaddr*)&server, sizeof(server));
 
 
 				if (sendOk == SOCKET_ERROR)
@@ -530,25 +529,18 @@ namespace ve {
 			void sendFrame(uint8_t* pkg) {
 				for (int i = 0; i < pktsize - 1; i++) {
 					if (currentBuffersize < maxBuffersize) {
-						sendBuffer[currentBuffersize] = pkg[i];
-						//sendBuffer[currentBuffersize] = 'a';
+						if (currentBuffersize == 0) {
+							sendBuffer[currentBuffersize] = htonl(frameCount);
+						}
+						else if (currentBuffersize == 1) {
+							sendBuffer[currentBuffersize] = htonl(fragNum);
+						}
+						else {
+							sendBuffer[currentBuffersize] = htonl(pkg[i]);
+						}
 						currentBuffersize++;
 					}
 					else {
-						int headerFrag = 1 + maxBuffersize;
-						sendBuffer[maxBuffersize] = (uint8_t)frameCount;
-						sendBuffer[headerFrag] = (uint8_t)fragNum;
-						char* fragment = reinterpret_cast<char*>(sendBuffer);
-						for (int i = 0; i < maxBuffersize + 2; i++) {
-							//htonl()
-								//std::cout << (int)fragment[i];
-						}
-						std::cout << frameCount << "_";
-						std::cout << fragNum << "_";
-						std::cout << (int)fragment[maxBuffersize] << "_";
-						std::cout << (int)fragment[headerFrag];
-						std::cout << std::endl;
-
 						sendFragment(sendBuffer);
 						currentBuffersize = 0;
 						++fragNum;
@@ -561,9 +553,8 @@ namespace ve {
 				fragNum = 0;
 				this->frameCount = frameCount;
 				this->pktsize = pktsize;
-				int bSize = maxBuffersize + headerSize;
-				sendBuffer = new uint8_t[bSize];
-				sendBuffer_c = new char[bSize];
+				sendBuffer = new uint32_t[maxBuffersize];
+				sendBuffer_c = new char[maxBuffersize];
 				sendFrame(pkt);
 			}
 		};
