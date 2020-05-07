@@ -15,6 +15,8 @@
 #include <WS2tcpip.h>
 #include <thread> 
 
+#include <inttypes.h>
+
 
 
 extern "C" {
@@ -341,6 +343,42 @@ namespace ve {
 		VkExtent2D extent;
 		uint32_t imageSize;
 
+		void decode(AVPacket* packet, int frameCount) {
+			// A codec context, and some encoded data packet from a stream/file, given.
+
+
+			// Send the data packet to the decoder
+			int sendPacketResult = avcodec_send_packet(c, packet);
+			if (sendPacketResult == AVERROR(EAGAIN)) {
+				// Decoder can't take packets right now. Make sure you are draining it.
+			}
+			else if (sendPacketResult < 0) {
+				// Failed to send the packet to the decoder
+			}
+
+			// Get decoded frame from decoder
+			AVFrame* frame = av_frame_alloc();
+			int decodeFrame = avcodec_receive_frame(c, frame);
+
+			if (decodeFrame == AVERROR(EAGAIN)) {
+				// The decoder doesn't have enough data to produce a frame
+				// Not an error unless we reached the end of the stream
+				// Just pass more packets until it has enough to produce a frame
+				av_frame_unref(frame);
+				av_freep(frame);
+			}
+			else if (decodeFrame < 0) {
+				// Failed to get a frame from the decoder
+				av_frame_unref(frame);
+				av_freep(frame);
+			}
+			
+			std::string name("media/screenshots/frame_decode" + std::to_string(frameCount) + ".jpg");
+			//stbi_write_jpg(name.c_str(), extent.width, extent.height, 4, frame->data, 4 * extent.width);
+			stbi_write_jpg(name.c_str(), 20, 15, 4, frame->data, 4 * 8);
+
+		}
+
 		void init() {
 			/* find the mpeg1 video encoder */
 			codec = avcodec_find_encoder(AV_CODEC_ID_MPEG4);
@@ -458,18 +496,9 @@ namespace ve {
 		// A callable object 
 		class frame_thread {
 		private:
-			int headerSize = 2, frameCount, pktsize, fragNum, currentBuffersize = 0;
+			int frameCount, pktsize, fragNum, currentBuffersize = 0;
 			int maxBuffersize = 1400;
-			uint32_t* sendBuffer, pkt;
-			char* sendBuffer_c;
-
-			char* getBuffer(uint8_t* dataImage, int frameCount) {
-				char buff[sizeof(dataImage)];
-				for (int i = 0; i < sizeof(dataImage); i++) {
-					buff[i] = dataImage[i];
-				}
-				return buff;
-			}
+			uint32_t* sendBuffer;
 
 			void sendFragment(uint32_t* buff) {
 				//https://bitbucket.org/sloankelly/youtube-source-repository/src/bb84cf7f8d95d37354cf7dd0f0a57e48f393bd4b/cpp/networking/UDPClientServerBasic/?at=master
@@ -510,7 +539,7 @@ namespace ve {
 				SOCKET out = socket(AF_INET, SOCK_DGRAM, 0);
 
 				// Write out to that socket
-				int sendOk = sendto(out, (char*)buff, sizeof(buff), 0, (sockaddr*)&server, sizeof(server));
+				int sendOk = sendto(out, (char*)buff, sizeof(uint32_t) * maxBuffersize, 0, (sockaddr*)&server, sizeof(server));
 
 
 				if (sendOk == SOCKET_ERROR)
@@ -526,7 +555,7 @@ namespace ve {
 			}
 
 
-			void sendFrame(uint8_t* pkg) {
+			void sendFrame(uint8_t* pkt) {
 				for (int i = 0; i < pktsize - 1; i++) {
 					if (currentBuffersize < maxBuffersize) {
 						if (currentBuffersize == 0) {
@@ -536,11 +565,19 @@ namespace ve {
 							sendBuffer[currentBuffersize] = htonl(fragNum);
 						}
 						else {
-							sendBuffer[currentBuffersize] = htonl(pkg[i]);
+							sendBuffer[currentBuffersize] = htonl(pkt[i]);
 						}
 						currentBuffersize++;
 					}
 					else {
+						if (true) {
+							std::cout << ntohl(sendBuffer[0]) << "_";
+							std::cout << ntohl(sendBuffer[1]) << "_";
+							for (int i = 0; i < 10; i++) {
+								std::cout << ntohl(sendBuffer[i * 70]);
+							}
+							std::cout << std::endl;
+						}
 						sendFragment(sendBuffer);
 						currentBuffersize = 0;
 						++fragNum;
@@ -554,7 +591,6 @@ namespace ve {
 				this->frameCount = frameCount;
 				this->pktsize = pktsize;
 				sendBuffer = new uint32_t[maxBuffersize];
-				sendBuffer_c = new char[maxBuffersize];
 				sendFrame(pkt);
 			}
 		};
@@ -601,7 +637,7 @@ namespace ve {
 			//only encode every 4th frame
 			if (!recordframe)
 				return;
-			if (!(interval % 2 != 0)) {
+			if (interval % 2 != 0) {
 				return;
 			}
 			////Compute fps
@@ -661,8 +697,16 @@ namespace ve {
 				//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
 				//if (addToSendBuffer(pkt.data, pkt.size)) {
 				//}
+				//std::thread th2(frame_thread(), dataImage, imageSize, frameCount);
 				std::thread th2(frame_thread(), pkt.data, pkt.size, frameCount);
 				th2.detach();
+				decode(&pkt, frameCount);
+				//std::cout << std::endl << frameCount << std::endl;
+				//for (int i = 0; i < 10; i++) {
+				//	std::cout << ntohl(htonl(pkt.data[i * 40])) << " ";
+				//}
+				//std::string name("media/screenshots/frame_" + std::to_string(frameCount) + ".jpg");
+				//stbi_write_jpg(name.c_str(), 8, 6, 4, pkt.data, 4 * 8);
 				fwrite(pkt.data, 1, pkt.size, f);
 				av_free_packet(&pkt);
 			}
@@ -684,6 +728,11 @@ namespace ve {
 
 			init();
 
+			f = fopen(filename, "wb");
+			if (!f) {
+				fprintf(stderr, "Could not open %s\n", filename);
+				exit(4);
+			}
 		};
 
 		///Destructor of class EventListenerCameraMocement
