@@ -330,7 +330,7 @@ namespace ve {
 
 	private:
 		bool recordframe, encodeframe = true;
-		bool debugframe = true;
+		bool debugframe = false;
 		float* m_AvgFrameTime;
 		const char* filename = "D:\\Projects\\ViennaVulkanEngine\\MPG1Video_highbitrate.mpg";
 		AVCodec* codec;
@@ -339,134 +339,81 @@ namespace ve {
 		FILE* f;
 		AVFrame* frame;
 		AVPacket pkt;
+		AVFrame* dframe;
+		AVPacket* dpkt;
 		SwsContext* ctx;
 		uint8_t* dataImage;
 		VkExtent2D extent;
 		uint32_t imageSize;
+		AVCodec* dcodec;
+		AVCodecParserContext* parser;
+		AVCodecContext* dc = NULL;
 
-		void decode(AVPacket* packet, int frameCount) {
-			// A codec context, and some encoded data packet from a stream/file, given.
+		static void pgm_save(unsigned char* buf, int wrap, int xsize, int ysize, char* filename)
+		{
+			FILE* f;
+			int i;
 
-
-			// Send the data packet to the decoder
-			int sendPacketResult = avcodec_send_packet(c, packet);
-			if (sendPacketResult == AVERROR(EAGAIN)) {
-				// Decoder can't take packets right now. Make sure you are draining it.
-			}
-			else if (sendPacketResult < 0) {
-				// Failed to send the packet to the decoder
-			}
-
-			// Get decoded frame from decoder
-			AVFrame* frame = av_frame_alloc();
-			int decodeFrame = avcodec_receive_frame(c, frame);
-
-			if (decodeFrame == AVERROR(EAGAIN)) {
-				// The decoder doesn't have enough data to produce a frame
-				// Not an error unless we reached the end of the stream
-				// Just pass more packets until it has enough to produce a frame
-				av_frame_unref(frame);
-				av_freep(frame);
-			}
-			else if (decodeFrame < 0) {
-				// Failed to get a frame from the decoder
-				av_frame_unref(frame);
-				av_freep(frame);
-			}
-
-			std::string name("media/screenshots/frame_decode" + std::to_string(frameCount) + ".jpg");
-			//stbi_write_jpg(name.c_str(), extent.width, extent.height, 4, frame->data, 4 * extent.width);
-			//stbi_write_jpg(name.c_str(), 20, 15, 4, frame->data, 4 * 8);
-			save_frame_as_jpeg(c, frame, name);
+			f = fopen(filename, "w");
+			fprintf(f, "P5\n%d %d\n%d\n", xsize, ysize, 255);
+			for (i = 0; i < ysize; i++)
+				fwrite(buf + i * wrap, 1, xsize, f);
+			fclose(f);
 		}
-		int save_frame_as_jpeg(AVCodecContext* pCodecCtx, AVFrame* pFrame, std::string name) {
-			AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
-			if (!codec)
-			{
-				printf("Codec not found\n");
+
+		static void decode(AVCodecContext* dec_ctx, AVFrame* frame, AVPacket* pkt, const char* filename) {
+			char buf[1024];
+			int ret;
+
+			ret = avcodec_send_packet(dec_ctx, pkt);
+			if (ret < 0) {
+				fprintf(stderr, "Error sending a packet for decoding\n");
+				return;
 				exit(1);
 			}
 
-			AVCodecContext* img_c = avcodec_alloc_context3(codec);
-			if (!img_c)
-			{
-				printf("Could not allocate video codec context\n");
-				exit(1);
-			}
-
-			img_c->bit_rate = 400000;
-			img_c->width = 320;
-			img_c->height = 200;
-			img_c->time_base = { 1,25 };
-			img_c->pix_fmt = AV_PIX_FMT_YUVJ420P;
-
-			if (avcodec_open2(img_c, codec, NULL) < 0)
-			{
-				printf("Could not open codec\n");
-				exit(1);
-			}
-
-			if (!frame)
-			{
-				printf("Could not allocate video frame\n");
-				exit(1);
-			}
-			frame->format = img_c->pix_fmt;
-			frame->width = img_c->width;
-			frame->height = img_c->height;
-
-			ret = av_image_alloc(frame->data, frame->linesize, img_c->width, img_c->height, img_c->pix_fmt, 32);
-			if (ret < 0)
-			{
-				printf("Could not allocate raw picture buffer\n");
-				exit(1);
-			}
-
-			av_init_packet(&pkt);
-			pkt.data = NULL;
-			pkt.size = 0;
-
-			/* prepare a dummy image */
-			/* Y */
-			for (int y = 0; y < img_c->height; y++) {
-				for (int x = 0; x < img_c->width; x++) {
-					frame->data[0][y * frame->linesize[0] + x] = x + y;
+			while (ret >= 0) {
+				ret = avcodec_receive_frame(dec_ctx, frame);
+				if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+					return;
+				else if (ret < 0) {
+					fprintf(stderr, "Error during decoding\n");
+					exit(1);
 				}
-			}
 
-			/* Cb and Cr */
-			for (int y = 0; y < img_c->height / 2; y++) {
-				for (int x = 0; x < img_c->width / 2; x++) {
-					frame->data[1][y * frame->linesize[1] + x] = 128 + y;
-					frame->data[2][y * frame->linesize[2] + x] = 64 + x;
+				printf("saving frame %3d\n", dec_ctx->frame_number);
+				fflush(stdout);
+
+				/* the picture is allocated by the decoder. no need to
+				   free it */
+				snprintf(buf, sizeof(buf), "%s-%d", filename, dec_ctx->frame_number);
+				pgm_save(frame->data[0], frame->linesize[0],
+					frame->width, frame->height, buf);
+			}
+		}
+
+		void decoderer(uint8_t* data, size_t data_size) {
+			const char* outfilename;
+			int ret;
+
+			outfilename = "test";
+
+			while (data_size > 0) {
+				ret = av_parser_parse2(parser, dc, &dpkt->data, &dpkt->size,
+					data, data_size, AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
+				if (ret < 0) {
+					fprintf(stderr, "Error while parsing\n");
+					exit(1);
 				}
+				data += ret;
+				data_size -= ret;
+
+				if (dpkt->size)
+					decode(dc, dframe, dpkt, outfilename);
 			}
 
-
-			frame->pts = 1;
-
-			int got_output = 0;
-			ret = avcodec_encode_video2(img_c, &pkt, frame, &got_output);
-			if (ret < 0)
-			{
-				printf("Error encoding frame\n");
-				exit(1);
-			}
-
-			if (got_output)
-			{
-				FILE* f = fopen(name.c_str(), "wb");
-				fwrite(pkt.data, 1, pkt.size, f);
-				av_free_packet(&pkt);
-			}
-
-			avcodec_close(img_c);
-			av_free(img_c);
-			//av_freep(&frame->data[0]);
-			//av_frame_free(&frame);
-			printf("\n");
-
-			return 0;
+			/* flush the decoder */
+			decode(dc, dframe, NULL, outfilename);
 		}
 
 		void init() {
@@ -582,6 +529,44 @@ namespace ve {
 			ctx = sws_getContext(extent.width, extent.height,
 				AV_PIX_FMT_RGBA, c->width, c->height,
 				c->pix_fmt, SWS_BICUBIC, 0, 0, 0);
+
+			/* find the MPEG-1 video decoder */
+			dcodec = avcodec_find_decoder(AV_CODEC_ID_MPEG4);
+			if (!dcodec) {
+				fprintf(stderr, "Codec not found\n");
+				exit(1);
+			}
+
+			dc = avcodec_alloc_context3(dcodec);
+			if (!dc) {
+				fprintf(stderr, "Could not allocate video codec context\n");
+				exit(1);
+			}
+			dc->width = extent.width;
+			dc->height = extent.height;
+
+			/* open it */
+			if (avcodec_open2(dc, dcodec, NULL) < 0) {
+				fprintf(stderr, "Could not open codec\n");
+				exit(1);
+			}
+
+			parser = av_parser_init(dcodec->id);
+			if (!parser) {
+				fprintf(stderr, "parser not found\n");
+				exit(1);
+			}
+
+			dpkt = av_packet_alloc();
+			if (!dpkt)
+				exit(1);
+
+
+			dframe = av_frame_alloc();
+			if (!dframe) {
+				fprintf(stderr, "Could not allocate video frame\n");
+				exit(1);
+			}
 		}
 
 		// A callable object 
@@ -665,12 +650,13 @@ namespace ve {
 							sendBuffer[2] = 0;
 						}
 						sendBuffer[3] = pktsize;
+						currentBuffersize += 4;
 					}
 					//FillBuffer
 					if (currentBuffersize > 3) {
 						sendBuffer[currentBuffersize] = pkt[i];
+						currentBuffersize++;
 					}
-					currentBuffersize++;
 					if ((!issignlePacket && currentBuffersize >= maxBuffersize) || i == pktsize - 1) {
 						if (debugfragment) {
 							std::cout << sendBuffer[0] << "_";
@@ -733,6 +719,10 @@ namespace ve {
 				av_free(c);
 				av_freep(&frame->data[0]);
 				av_frame_free(&frame);
+				av_parser_close(parser);
+				avcodec_free_context(&dc);
+				av_frame_free(&dframe);
+				av_packet_free(&dpkt);
 				recordframe = false;
 			}
 
@@ -744,9 +734,9 @@ namespace ve {
 			//only encode every 4th frame
 			if (!recordframe)
 				return;
-			if (interval % 2 != 0) {
-				return;
-			}
+			//if (interval % 2 != 0) {
+			//	return;
+			//}
 			////Compute fps
 			//float fps = 1 / *m_AvgFrameTime;
 			//only every 4th frame is encoded
@@ -800,10 +790,14 @@ namespace ve {
 				exit(7);
 			}
 
+
+
+
 			if (got_output) {
 				//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
 				new frame_sender(pkt.data, pkt.size, frameCount);
-				//decode(&pkt, frameCount);
+				decoderer(pkt.data, pkt.size);
+				std::string name("media/screenshots/frame_decode" + std::to_string(frameCount) + ".jpg");
 				if (debugframe) {
 					std::cout << std::endl << frameCount << "_" << pkt.size << std::endl;
 					for (int i = 0; i < 10; i++) {
@@ -917,6 +911,54 @@ namespace ve {
 }
 
 using namespace ve;
+
+
+
+static void pgm_save(unsigned char* buf, int wrap, int xsize, int ysize,
+	char* filename)
+{
+	FILE* f;
+	int i;
+
+	f = fopen(filename, "w");
+	fprintf(f, "P5\n%d %d\n%d\n", xsize, ysize, 255);
+	for (i = 0; i < ysize; i++)
+		fwrite(buf + i * wrap, 1, xsize, f);
+	fclose(f);
+}
+
+static void decode(AVCodecContext* dec_ctx, AVFrame* frame, AVPacket* pkt,
+	const char* filename)
+{
+	char buf[1024];
+	int ret;
+
+	ret = avcodec_send_packet(dec_ctx, pkt);
+	if (ret < 0) {
+		fprintf(stderr, "Error sending a packet for decoding\n");
+		exit(1);
+	}
+
+	while (ret >= 0) {
+		ret = avcodec_receive_frame(dec_ctx, frame);
+		if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+			return;
+		else if (ret < 0) {
+			fprintf(stderr, "Error during decoding\n");
+			exit(1);
+		}
+
+		printf("saving frame %3d\n", dec_ctx->frame_number);
+		fflush(stdout);
+
+		/* the picture is allocated by the decoder. no need to
+		   free it */
+		snprintf(buf, sizeof(buf), "%s-%d", filename, dec_ctx->frame_number);
+		pgm_save(frame->data[0], frame->linesize[0],
+			frame->width, frame->height, buf);
+	}
+}
+
 
 int main() {
 
