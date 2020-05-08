@@ -372,11 +372,100 @@ namespace ve {
 				av_frame_unref(frame);
 				av_freep(frame);
 			}
-			
+
 			std::string name("media/screenshots/frame_decode" + std::to_string(frameCount) + ".jpg");
 			//stbi_write_jpg(name.c_str(), extent.width, extent.height, 4, frame->data, 4 * extent.width);
-			stbi_write_jpg(name.c_str(), 20, 15, 4, frame->data, 4 * 8);
+			//stbi_write_jpg(name.c_str(), 20, 15, 4, frame->data, 4 * 8);
+			save_frame_as_jpeg(c, frame, name);
+		}
+		int save_frame_as_jpeg(AVCodecContext* pCodecCtx, AVFrame* pFrame, std::string name) {
+			AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
+			if (!codec)
+			{
+				printf("Codec not found\n");
+				exit(1);
+			}
 
+			AVCodecContext* img_c = avcodec_alloc_context3(codec);
+			if (!img_c)
+			{
+				printf("Could not allocate video codec context\n");
+				exit(1);
+			}
+
+			img_c->bit_rate = 400000;
+			img_c->width = 320;
+			img_c->height = 200;
+			img_c->time_base = { 1,25 };
+			img_c->pix_fmt = AV_PIX_FMT_YUVJ420P;
+
+			if (avcodec_open2(img_c, codec, NULL) < 0)
+			{
+				printf("Could not open codec\n");
+				exit(1);
+			}
+
+			if (!frame)
+			{
+				printf("Could not allocate video frame\n");
+				exit(1);
+			}
+			frame->format = img_c->pix_fmt;
+			frame->width = img_c->width;
+			frame->height = img_c->height;
+
+			ret = av_image_alloc(frame->data, frame->linesize, img_c->width, img_c->height, img_c->pix_fmt, 32);
+			if (ret < 0)
+			{
+				printf("Could not allocate raw picture buffer\n");
+				exit(1);
+			}
+
+			av_init_packet(&pkt);
+			pkt.data = NULL;
+			pkt.size = 0;
+
+			/* prepare a dummy image */
+			/* Y */
+			for (int y = 0; y < img_c->height; y++) {
+				for (int x = 0; x < img_c->width; x++) {
+					frame->data[0][y * frame->linesize[0] + x] = x + y;
+				}
+			}
+
+			/* Cb and Cr */
+			for (int y = 0; y < img_c->height / 2; y++) {
+				for (int x = 0; x < img_c->width / 2; x++) {
+					frame->data[1][y * frame->linesize[1] + x] = 128 + y;
+					frame->data[2][y * frame->linesize[2] + x] = 64 + x;
+				}
+			}
+
+
+			frame->pts = 1;
+
+			int got_output = 0;
+			ret = avcodec_encode_video2(img_c, &pkt, frame, &got_output);
+			if (ret < 0)
+			{
+				printf("Error encoding frame\n");
+				exit(1);
+			}
+
+			if (got_output)
+			{
+				FILE* f = fopen(name.c_str(), "wb");
+				fwrite(pkt.data, 1, pkt.size, f);
+				av_free_packet(&pkt);
+			}
+
+			avcodec_close(img_c);
+			av_free(img_c);
+			//av_freep(&frame->data[0]);
+			//av_frame_free(&frame);
+			printf("\n");
+
+			return 0;
 		}
 
 		void init() {
@@ -399,6 +488,7 @@ namespace ve {
 			c->height = extent.height;
 			//
 			//Set pixel format
+
 			c->pix_fmt = AVPixelFormat::AV_PIX_FMT_YUV420P;
 			/* frames per second */
 			c->time_base = { 1, 25 };
@@ -496,7 +586,9 @@ namespace ve {
 		// A callable object 
 		class frame_thread {
 		private:
-			int frameCount, pktsize, fragNum, currentBuffersize = 0;
+			uint32_t frameCount, pktsize, fragNum;
+			bool issignlePacket;
+			int currentBuffersize = 0;
 			int maxBuffersize = 1400;
 			uint32_t* sendBuffer;
 
@@ -556,25 +648,33 @@ namespace ve {
 
 
 			void sendFrame(uint8_t* pkt) {
-				for (int i = 0; i < pktsize - 1; i++) {
-					if (currentBuffersize < maxBuffersize) {
-						if (currentBuffersize == 0) {
-							sendBuffer[currentBuffersize] = htonl(frameCount);
-						}
-						else if (currentBuffersize == 1) {
-							sendBuffer[currentBuffersize] = htonl(fragNum);
+				int max = maxBuffersize;
+				if (issignlePacket)
+					max = pktsize - 1;
+				for (int i = 0; i < pktsize; i++) {
+					//Set Header
+					if (currentBuffersize == 0) {
+						sendBuffer[0] = frameCount;
+						sendBuffer[1] = fragNum;
+						if (issignlePacket) {
+							sendBuffer[2] = 1;
 						}
 						else {
-							sendBuffer[currentBuffersize] = htonl(pkt[i]);
+							sendBuffer[2] = 0;
 						}
-						currentBuffersize++;
 					}
-					else {
+					//FillBuffer
+					if (currentBuffersize > 2) {
+						sendBuffer[currentBuffersize] = pkt[i];
+					}
+					currentBuffersize++;
+					if (currentBuffersize >= max) {
 						if (true) {
-							std::cout << ntohl(sendBuffer[0]) << "_";
-							std::cout << ntohl(sendBuffer[1]) << "_";
-							for (int i = 0; i < 10; i++) {
-								std::cout << ntohl(sendBuffer[i * 70]);
+							std::cout << sendBuffer[0] << "_";
+							std::cout << sendBuffer[1] << "_";
+							std::cout << sendBuffer[2] << "_";
+							for (int j = 0; j < 10; j++) {
+								std::cout << sendBuffer[j * 70];
 							}
 							std::cout << std::endl;
 						}
@@ -590,6 +690,7 @@ namespace ve {
 				fragNum = 0;
 				this->frameCount = frameCount;
 				this->pktsize = pktsize;
+				issignlePacket = pktsize <= maxBuffersize;
 				sendBuffer = new uint32_t[maxBuffersize];
 				sendFrame(pkt);
 			}
@@ -700,7 +801,7 @@ namespace ve {
 				//std::thread th2(frame_thread(), dataImage, imageSize, frameCount);
 				std::thread th2(frame_thread(), pkt.data, pkt.size, frameCount);
 				th2.detach();
-				decode(&pkt, frameCount);
+				//decode(&pkt, frameCount);
 				//std::cout << std::endl << frameCount << std::endl;
 				//for (int i = 0; i < 10; i++) {
 				//	std::cout << ntohl(htonl(pkt.data[i * 40])) << " ";
