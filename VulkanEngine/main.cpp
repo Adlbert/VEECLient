@@ -796,7 +796,10 @@ namespace ve {
 			if (got_output) {
 				//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
 				new frame_sender(pkt.data, pkt.size, frameCount);
-				decoderer(pkt.data, pkt.size);
+				//decoderer(pkt.data, pkt.size);
+				const char* outfilename;
+				outfilename = "test";
+				decode(dc, dframe, &pkt, outfilename);
 				std::string name("media/screenshots/frame_decode" + std::to_string(frameCount) + ".jpg");
 				if (debugframe) {
 					std::cout << std::endl << frameCount << "_" << pkt.size << std::endl;
