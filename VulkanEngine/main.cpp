@@ -330,6 +330,7 @@ namespace ve {
 
 	private:
 		bool recordframe, encodeframe = true;
+		bool debugframe = false;
 		float* m_AvgFrameTime;
 		const char* filename = "D:\\Projects\\ViennaVulkanEngine\\MPG1Video_highbitrate.mpg";
 		AVCodec* codec;
@@ -588,6 +589,7 @@ namespace ve {
 		private:
 			uint32_t frameCount, pktsize, fragNum;
 			bool issignlePacket;
+			bool debugfragment = true;
 			int currentBuffersize = 0;
 			int maxBuffersize = 1400;
 			uint32_t* sendBuffer;
@@ -662,17 +664,19 @@ namespace ve {
 						else {
 							sendBuffer[2] = 0;
 						}
+						sendBuffer[3] = pktsize;
 					}
 					//FillBuffer
-					if (currentBuffersize > 2) {
+					if (currentBuffersize > 3) {
 						sendBuffer[currentBuffersize] = pkt[i];
 					}
 					currentBuffersize++;
-					if (currentBuffersize >= max) {
-						if (true) {
+					if ((!issignlePacket && currentBuffersize >= maxBuffersize) || i == pktsize - 1) {
+						if (debugfragment) {
 							std::cout << sendBuffer[0] << "_";
 							std::cout << sendBuffer[1] << "_";
 							std::cout << sendBuffer[2] << "_";
+							std::cout << sendBuffer[3] << "_";
 							for (int j = 0; j < 10; j++) {
 								std::cout << sendBuffer[j * 70];
 							}
@@ -681,6 +685,8 @@ namespace ve {
 						sendFragment(sendBuffer);
 						currentBuffersize = 0;
 						++fragNum;
+						if (issignlePacket)
+							break;
 					}
 				}
 			}
@@ -796,18 +802,15 @@ namespace ve {
 
 			if (got_output) {
 				//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
-				//if (addToSendBuffer(pkt.data, pkt.size)) {
-				//}
-				//std::thread th2(frame_thread(), dataImage, imageSize, frameCount);
 				std::thread th2(frame_thread(), pkt.data, pkt.size, frameCount);
 				th2.detach();
 				//decode(&pkt, frameCount);
-				//std::cout << std::endl << frameCount << std::endl;
-				//for (int i = 0; i < 10; i++) {
-				//	std::cout << ntohl(htonl(pkt.data[i * 40])) << " ";
-				//}
-				//std::string name("media/screenshots/frame_" + std::to_string(frameCount) + ".jpg");
-				//stbi_write_jpg(name.c_str(), 8, 6, 4, pkt.data, 4 * 8);
+				if (debugframe) {
+					std::cout << std::endl << frameCount << "_" << pkt.size << std::endl;
+					for (int i = 0; i < 10; i++) {
+						std::cout << ntohl(htonl(pkt.data[i * 40])) << " ";
+					}
+				}
 				fwrite(pkt.data, 1, pkt.size, f);
 				av_free_packet(&pkt);
 			}
