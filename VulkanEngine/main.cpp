@@ -330,7 +330,7 @@ namespace ve {
 
 	private:
 		bool recordframe, encodeframe = true;
-		bool debugframe = false;
+		bool debugframe = true;
 		float* m_AvgFrameTime;
 		const char* filename = "D:\\Projects\\ViennaVulkanEngine\\MPG1Video_highbitrate.mpg";
 		AVCodec* codec;
@@ -589,7 +589,7 @@ namespace ve {
 		private:
 			uint32_t frameCount, pktsize, fragNum;
 			bool issignlePacket;
-			bool debugfragment = true;
+			bool debugfragment = false;
 			int currentBuffersize = 0;
 			int maxBuffersize = 1400;
 			uint32_t* sendBuffer;
@@ -809,6 +809,7 @@ namespace ve {
 					for (int i = 0; i < 10; i++) {
 						std::cout << ntohl(htonl(pkt.data[i * 40])) << " ";
 					}
+					std::cout << std::endl;
 				}
 				fwrite(pkt.data, 1, pkt.size, f);
 				av_free_packet(&pkt);
