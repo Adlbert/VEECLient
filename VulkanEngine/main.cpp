@@ -585,7 +585,7 @@ namespace ve {
 		}
 
 		// A callable object 
-		class frame_thread {
+		class frame_sender {
 		private:
 			uint32_t frameCount, pktsize, fragNum;
 			bool issignlePacket;
@@ -692,7 +692,7 @@ namespace ve {
 			}
 
 		public:
-			void operator()(uint8_t* pkt, int pktsize, int frameCount) {
+			frame_sender(uint8_t* pkt, int pktsize, int frameCount) {
 				fragNum = 0;
 				this->frameCount = frameCount;
 				this->pktsize = pktsize;
@@ -802,8 +802,7 @@ namespace ve {
 
 			if (got_output) {
 				//printf("Write frame %3d (size=%5d)\n", frameCount, pkt.size);
-				std::thread th2(frame_thread(), pkt.data, pkt.size, frameCount);
-				th2.detach();
+				new frame_sender(pkt.data, pkt.size, frameCount);
 				//decode(&pkt, frameCount);
 				if (debugframe) {
 					std::cout << std::endl << frameCount << "_" << pkt.size << std::endl;
