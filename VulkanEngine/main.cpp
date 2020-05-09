@@ -339,82 +339,10 @@ namespace ve {
 		FILE* f;
 		AVFrame* frame;
 		AVPacket pkt;
-		AVFrame* dframe;
-		AVPacket* dpkt;
 		SwsContext* ctx;
 		uint8_t* dataImage;
 		VkExtent2D extent;
 		uint32_t imageSize;
-		AVCodec* dcodec;
-		AVCodecParserContext* parser;
-		AVCodecContext* dc = NULL;
-
-		static void pgm_save(unsigned char* buf, int wrap, int xsize, int ysize, char* filename)
-		{
-			FILE* f;
-			int i;
-
-			f = fopen(filename, "w");
-			fprintf(f, "P5\n%d %d\n%d\n", xsize, ysize, 255);
-			for (i = 0; i < ysize; i++)
-				fwrite(buf + i * wrap, 1, xsize, f);
-			fclose(f);
-		}
-
-		static void decode(AVCodecContext* dec_ctx, AVFrame* frame, AVPacket* pkt, const char* filename) {
-			char buf[1024];
-			int ret;
-
-			ret = avcodec_send_packet(dec_ctx, pkt);
-			if (ret < 0) {
-				fprintf(stderr, "Error sending a packet for decoding\n");
-				return;
-				exit(1);
-			}
-
-			while (ret >= 0) {
-				ret = avcodec_receive_frame(dec_ctx, frame);
-				if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-					return;
-				else if (ret < 0) {
-					fprintf(stderr, "Error during decoding\n");
-					exit(1);
-				}
-
-				printf("saving frame %3d\n", dec_ctx->frame_number);
-				fflush(stdout);
-
-				/* the picture is allocated by the decoder. no need to
-				   free it */
-				snprintf(buf, sizeof(buf), "%s-%d", filename, dec_ctx->frame_number);
-				pgm_save(frame->data[0], frame->linesize[0],
-					frame->width, frame->height, buf);
-			}
-		}
-
-		void decoderer(uint8_t* data, size_t data_size) {
-			const char* outfilename;
-			int ret;
-
-			outfilename = "test";
-
-			while (data_size > 0) {
-				ret = av_parser_parse2(parser, dc, &dpkt->data, &dpkt->size,
-					data, data_size, AV_NOPTS_VALUE, AV_NOPTS_VALUE, 0);
-				if (ret < 0) {
-					fprintf(stderr, "Error while parsing\n");
-					exit(1);
-				}
-				data += ret;
-				data_size -= ret;
-
-				if (dpkt->size)
-					decode(dc, dframe, dpkt, outfilename);
-			}
-
-			/* flush the decoder */
-			decode(dc, dframe, NULL, outfilename);
-		}
 
 		void init() {
 			/* find the mpeg1 video encoder */
@@ -529,44 +457,6 @@ namespace ve {
 			ctx = sws_getContext(extent.width, extent.height,
 				AV_PIX_FMT_RGBA, c->width, c->height,
 				c->pix_fmt, SWS_BICUBIC, 0, 0, 0);
-
-			/* find the MPEG-1 video decoder */
-			dcodec = avcodec_find_decoder(AV_CODEC_ID_MPEG4);
-			if (!dcodec) {
-				fprintf(stderr, "Codec not found\n");
-				exit(1);
-			}
-
-			dc = avcodec_alloc_context3(dcodec);
-			if (!dc) {
-				fprintf(stderr, "Could not allocate video codec context\n");
-				exit(1);
-			}
-			dc->width = extent.width;
-			dc->height = extent.height;
-
-			/* open it */
-			if (avcodec_open2(dc, dcodec, NULL) < 0) {
-				fprintf(stderr, "Could not open codec\n");
-				exit(1);
-			}
-
-			parser = av_parser_init(dcodec->id);
-			if (!parser) {
-				fprintf(stderr, "parser not found\n");
-				exit(1);
-			}
-
-			dpkt = av_packet_alloc();
-			if (!dpkt)
-				exit(1);
-
-
-			dframe = av_frame_alloc();
-			if (!dframe) {
-				fprintf(stderr, "Could not allocate video frame\n");
-				exit(1);
-			}
 		}
 
 		// A callable object 
@@ -581,10 +471,6 @@ namespace ve {
 
 			void sendFragment(uint32_t* buff) {
 				//https://bitbucket.org/sloankelly/youtube-source-repository/src/bb84cf7f8d95d37354cf7dd0f0a57e48f393bd4b/cpp/networking/UDPClientServerBasic/?at=master
-				////////////////////////////////////////////////////////////
-				// INITIALIZE WINSOCK
-				////////////////////////////////////////////////////////////
-
 				// Structure to store the WinSock version. This is filled in
 				// on the call to WSAStartup()eds
 				WSADATA data;
@@ -603,11 +489,6 @@ namespace ve {
 					std::cout << "Can't start Winsock! " << wsOk;
 					return;
 				}
-
-				////////////////////////////////////////////////////////////
-				// CONNECT TO THE SERVER
-				////////////////////////////////////////////////////////////
-
 				// Create a hint structure for the server
 				sockaddr_in server;
 				server.sin_family = AF_INET; // AF_INET = IPv4 addresses
@@ -719,10 +600,6 @@ namespace ve {
 				av_free(c);
 				av_freep(&frame->data[0]);
 				av_frame_free(&frame);
-				av_parser_close(parser);
-				avcodec_free_context(&dc);
-				av_frame_free(&dframe);
-				av_packet_free(&dpkt);
 				recordframe = false;
 			}
 
@@ -734,9 +611,9 @@ namespace ve {
 			//only encode every 4th frame
 			if (!recordframe)
 				return;
-			//if (interval % 2 != 0) {
-			//	return;
-			//}
+			if (interval % 2 != 0) {
+				return;
+			}
 			////Compute fps
 			//float fps = 1 / *m_AvgFrameTime;
 			//only every 4th frame is encoded
@@ -799,7 +676,7 @@ namespace ve {
 				//decoderer(pkt.data, pkt.size);
 				const char* outfilename;
 				outfilename = "test";
-				decode(dc, dframe, &pkt, outfilename);
+				//decode(dc, dframe, &pkt, outfilename);
 				std::string name("media/screenshots/frame_decode" + std::to_string(frameCount) + ".jpg");
 				if (debugframe) {
 					std::cout << std::endl << frameCount << "_" << pkt.size << std::endl;
